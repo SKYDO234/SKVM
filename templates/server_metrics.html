@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import status_badge, kpi, meter, banner %}
+{% block title %}Metrics · {{ server.name }}{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.index') }}">Servers</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ server.name }}</a><span class="sep">/</span>
+  <strong>Metrics</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('pulse', 22) }} Telemetry {{ status_badge(server.status) }}</h1>
+    <div class="sub">Streaming samples plus stored rollups. History is retained for
+      {{ settings_values.get('metrics_retention_days', 30) }} days and downsampled for charts.</div>
+  </div>
+  <div class="actions">
+    <div class="segmented" id="range-picker">
+      <button data-range="live" class="active">Live</button>
+      <button data-range="1h">1 h</button>
+      <button data-range="6h">6 h</button>
+      <button data-range="24h">24 h</button>
+      <button data-range="7d">7 d</button>
+      <button data-range="30d">30 d</button>
+    </div>
+    <button class="btn ghost" id="btn-csv">{{ icon('download', 16) }} Export CSV</button>
+    <a class="btn ghost" href="{{ url_for('servers.detail', uid=server.uid) }}">{{ icon('arrowLeft', 16) }} Cockpit</a>
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  {{ kpi('CPU now', '%.1f' | format(stats.cpu_pct or 0), '%', 'cpu', 'a', 'spark-cpu',
+         sub='load1 ' ~ (stats.load1 or 0) ~ ' · ' ~ (stats.procs or 0) ~ ' procs') }}
+  {{ kpi('Memory now', '%.1f' | format(stats.ram_pct or 0), '%', 'memory', 'b', 'spark-ram',
+         sub='%.1f' | format((stats.ram_used_mb or 0) / 1024) ~ ' GB of ' ~ (server.ram_mb / 1024) | round(1) ~ ' GB') }}
+  {{ kpi('Disk now', ('%.1f' | format(stats.disk_pct)) if stats.disk_pct is not none else '—', '%', 'disk', 'c', 'spark-disk',
+         sub='%.1f' | format(stats.disk_used_gb or 0) ~ ' GB of ' ~ server.disk_gb ~ ' GB') }}
+  {{ kpi('Network', '%.0f' | format(stats.net_rx_kbps or 0), 'KB/s in', 'wifi', 'd', 'spark-net',
+         sub='%.0f' | format(stats.net_tx_kbps or 0) ~ ' KB/s out · ' ~ server.bandwidth_used_gb ~ ' GB used') }}
+</section>
+
+<div class="glass flush mb-2">
+  <div class="card-head">
+    <h3 id="chart-title">{{ icon('chart', 16) }} CPU · memory · network</h3>
+    <div class="sub" id="chart-sub">last 6 minutes, 2 s resolution</div>
+    <div class="actions"><span class="live-pill" id="chart-live"><span class="pulse"></span> live</span></div>
+  </div>
+  <div style="padding:16px 18px 0" id="main-chart"></div>
+  <div class="chart-foot">
+    <div class="legend">
+      <span><i style="background:var(--accent)"></i> CPU %</span>
+      <span><i style="background:var(--accent-3)"></i> Memory %</span>
+      <span><i style="background:var(--accent-4)"></i> Net in KB/s</span>
+      <span><i style="background:var(--warn)"></i> Net out KB/s</span>
+    </div>
+    <span class="tiny dim" id="sample-count">{{ series | length }} live points buffered</span>
+  </div>
+</div>
+
+<section class="grid cols-2 mb-2">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('gauge', 16) }} Instant readings</h3>
+      <div class="actions"><span class="tiny dim">sampled {{ stats.sampled_at }}</span></div>
+    </div>
+    <div class="card-body">
+      <div class="row" style="justify-content:space-around">
+        <div id="gauge-cpu" class="gauge"></div>
+        <div id="gauge-ram" class="gauge"></div>
+        <div id="gauge-disk" class="gauge"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="grid cols-2">
+        <div class="kv">
+          <dt>vCPU</dt><dd class="mono">{{ server.cpu_cores | round(0) | int }}</dd>
+          <dt>Load (1 m)</dt><dd class="mono">{{ stats.load1 or 0 }}</dd>
+          <dt>Processes</dt><dd class="mono">{{ stats.procs or 0 }}</dd>
+          <dt>Uptime</dt><dd>{{ ((stats.uptime_s or 0) // 3600) }} h</dd>
+        </div>
+        <div class="kv">
+          <dt>RX</dt><dd class="mono">{{ '%.1f' | format(stats.net_rx_kbps or 0) }} KB/s</dd>
+          <dt>TX</dt><dd class="mono">{{ '%.1f' | format(stats.net_tx_kbps or 0) }} KB/s</dd>
+          <dt>Offline</dt><dd>{{ 'yes' if stats.offline else 'no' }}</dd>
+          <dt>Driver</dt><dd class="mono">{{ server.driver }}</dd>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('layers', 16) }} 24-hour profile</h3>
+      <div class="actions"><span class="badge quiet">mean buckets</span></div>
+    </div>
+    <div style="padding:12px 18px 6px" id="heat-strip"></div>
+    <div class="chart-foot">
+      <span class="tiny dim">Each cell is a mean bucket; darker = busier.</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data compact">
+        <thead><tr><th>Window</th><th>Avg CPU</th><th>Peak CPU</th><th>Avg RAM</th><th>RX</th><th>TX</th></tr></thead>
+        <tbody>
+          {% for window, rows in [('24 h', history_24h), ('7 d', history_7d)] %}
+            {% if rows %}
+              <tr>
+                <td>{{ window }}</td>
+                <td class="mono">{{ (rows | sum(attribute='cpu') / rows | length) | round(1) }}%</td>
+                <td class="mono">{{ (rows | map(attribute='cpu') | max) | round(1) }}%</td>
+                <td class="mono">{{ (rows | sum(attribute='ram') / rows | length) | round(1) }}%</td>
+                <td class="mono">{{ (rows | sum(attribute='rx') / rows | length) | round(1) }}</td>
+                <td class="mono">{{ (rows | sum(attribute='tx') / rows | length) | round(1) }}</td>
+              </tr>
+            {% else %}
+              <tr><td>{{ window }}</td><td colspan="5" class="tiny muted">no stored samples yet — the worker records every minute</td></tr>
+            {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="glass">
+  <div class="card-head"><h3>{{ icon('terminal', 16) }} Raw samples (JSON)</h3>
+    <div class="actions"><button class="btn sm quiet" data-copy-from="#raw-json">{{ icon('copy', 13) }}</button></div>
+  </div>
+  <pre class="log" id="raw-json">{{ {'stats': stats, 'live': series[-12:] if series else [], 'history_24h': history_24h[-12:] if history_24h else []} | tojson(indent=1) }}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="metrics-data" type="application/json">{{ {
+  'uid': server.uid,
+  'name': server.name,
+  'live': series or [],
+  'history24': history_24h or [],
+  'history7': history_7d or [],
+  'stats': stats,
+  'cpu': server.cpu_cores | round(0) | int,
+  'ram_mb': server.ram_mb,
+  'disk_gb': server.disk_gb,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/metrics.js') }}"></script>
+{% endblock %}

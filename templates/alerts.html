@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, kpi, empty_state, meter, banner %}
+{% block title %}Alerts{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Alerts</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('bell', 22) }} Alerting
+      {% if counters.open %}<span class="badge crit">{{ counters.open }} open</span>{% endif %}
+    </h1>
+    <div class="sub">Threshold rules evaluated every 10 seconds against live telemetry. Delivery via e-mail
+      ({{ 'enabled' if settings_values.get('alert_email_enabled') else 'disabled' }}) and JSON webhooks.</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-test">{{ icon('send', 16) }} Send test</button>
+    <button class="btn ghost" id="btn-seed">{{ icon('spark', 16) }} Seed presets</button>
+    <button class="btn primary" id="btn-new-rule">{{ icon('plus', 16) }} New rule</button>
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  {{ kpi('Open alerts', counters.open, '', 'bell', 'a', sub='unacknowledged events') }}
+  {{ kpi('Events (24 h)', counters.events_24h, '', 'activity', 'b', sub=counters.critical_24h ~ ' critical') }}
+  {{ kpi('Active rules', rules | selectattr('enabled') | list | length, '', 'shieldCheck', 'c',
+         sub=(rules | length) ~ ' total configured') }}
+  {{ kpi('Servers watched', servers | length, '', 'server', 'd', sub='across ' ~ (metrics | length) ~ ' metric types') }}
+</section>
+
+<div class="glass flush mb-2">
+  <div class="tabs" data-tabs>
+    <button class="tab active" data-tab="events">{{ icon('activity', 14) }} Event feed</button>
+    <button class="tab" data-tab="rules">{{ icon('shieldCheck', 14) }} Rules <span class="badge quiet">{{ rules | length }}</span></button>
+    <button class="tab" data-tab="metrics">{{ icon('chart', 14) }} Metric reference</button>
+  </div>
+
+  <div class="tab-panel active" data-tab-panel="events">
+    <div class="table-toolbar">
+      <div class="row tight grow" style="flex:1">
+        <select class="select" id="event-filter" style="max-width:180px">
+          <option value="">All severities</option>
+          {% for severity in severities %}<option value="{{ severity }}">{{ severity | title }}</option>{% endfor %}
+        </select>
+        <label class="checkbox"><input type="checkbox" id="only-open"> <span>Only unacknowledged</span></label>
+      </div>
+      <div class="row tight">
+        <button class="btn sm ghost" id="btn-ack-all">{{ icon('check', 13) }} Ack all</button>
+        <button class="btn sm quiet" id="btn-refresh-events">{{ icon('refresh', 13) }} Refresh</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead>
+          <tr><th>When</th><th>Severity</th><th>State</th><th>Server</th><th>Message</th><th>Value</th><th></th></tr>
+        </thead>
+        <tbody id="event-rows">
+          {% for event in events %}
+            <tr data-event="{{ event.id }}" data-severity="{{ event.severity }}" data-open="{{ 'false' if event.acknowledged_at else 'true' }}">
+              <td class="tiny">{{ event.ts }}<div class="tiny dim">{{ event.human if event.human is defined else '' }}</div></td>
+              <td>{{ badge(event.severity, 'crit' if event.severity == 'critical' else ('warn' if event.severity == 'warning' else 'info')) }}</td>
+              <td>{{ badge(event.state, 'crit' if event.state == 'firing' else 'good') }}</td>
+              <td class="tiny">
+                {% if event.server %}<a href="{{ url_for('servers.detail', uid=event.server.uid) }}">{{ event.server.name }}</a>
+                {% else %}<span class="dim">fleet-wide</span>{% endif %}
+              </td>
+              <td class="tiny">{{ event.message or '—' }}</td>
+              <td class="mono tiny">{{ event.value }}</td>
+              <td>
+                {% if not event.acknowledged_at %}
+                  <button class="btn sm quiet" data-ack="{{ event.id }}">{{ icon('check', 12) }} Ack</button>
+                {% else %}
+                  <span class="tiny dim">acked{% if event.acknowledged_by %} by {{ event.acknowledged_by }}{% endif %}</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if not events %}{{ empty_state('No alert events yet', 'When a rule breaches its threshold the event lands here — and in your inbox if notifications are on.', 'check') }}{% endif %}
+  </div>
+
+  <div class="tab-panel" data-tab-panel="rules">
+    <div class="rule-grid">
+      {% for rule in rules %}
+        <article class="glass rule-card {{ rule.state }}" data-rule="{{ rule.id }}">
+          <div class="row between">
+            <div>
+              <b>{{ rule.name }}</b>
+              <div class="tiny dim mono">{{ rule.metric }} {{ rule.comparator }} {{ rule.threshold }} · for {{ rule.duration_s }}s</div>
+            </div>
+            <label class="switch" data-tip="Enable / disable">
+              <input type="checkbox" data-rule-toggle="{{ rule.id }}" {{ 'checked' if rule.enabled }}>
+              <span class="track"><span class="knob"></span></span>
+            </label>
+          </div>
+          <div class="row tight mt-1">
+            {{ badge(rule.severity, 'crit' if rule.severity == 'critical' else 'warn') }}
+            {{ badge(rule.state, 'crit' if rule.state == 'firing' else 'good') }}
+            {% if rule.server %}<span class="chip">{{ rule.server.name }}</span>{% else %}<span class="chip">fleet-wide</span>{% endif %}
+            {% if rule.notify_webhook %}<span class="chip" data-tip="{{ rule.notify_webhook }}">webhook</span>{% endif %}
+          </div>
+          <div class="rule-stats">
+            <div><span class="tiny dim">Last value</span><b class="mono">{{ rule.last_value if rule.last_value is not none else '—' }}</b></div>
+            <div><span class="tiny dim">Fired</span><b class="mono">{{ rule.fire_count }}×</b></div>
+            <div><span class="tiny dim">Breaching since</span><b class="mono tiny">{{ rule.breach_since or '—' }}</b></div>
+          </div>
+          {% set metric_meta = metrics.get(rule.metric) or {} %}
+          {{ meter(((rule.last_value or 0) / (metric_meta.max or 100) * 100) | round(1), 'warn' if rule.state == 'ok' else 'critical', true) }}
+          <div class="row tight mt-2">
+            <button class="btn sm ghost" data-rule-edit="{{ rule.id }}">{{ icon('settings', 13) }} Edit</button>
+            <button class="btn sm quiet" data-rule-delete="{{ rule.id }}">{{ icon('trash', 13) }} Delete</button>
+          </div>
+        </article>
+      {% endfor %}
+      <button class="rule-card add" id="btn-new-rule-2">{{ icon('plus', 22) }}<span>Create a rule</span></button>
+    </div>
+  </div>
+
+  <div class="tab-panel" data-tab-panel="metrics">
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Metric key</th><th>Label</th><th>Unit</th><th>Suggested threshold</th><th>Comparator</th></tr></thead>
+        <tbody>
+          {% for key, meta in metrics.items() %}
+            <tr>
+              <td class="mono">{{ key }}</td>
+              <td>{{ meta.label }}</td>
+              <td class="mono tiny">{{ meta.unit or '—' }}</td>
+              <td class="mono tiny">{{ meta.default }}</td>
+              <td class="mono tiny">&gt;</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-body tiny muted">
+      Rules fire after the value stays in breach for <b>duration_s</b> seconds, then resolve automatically.
+      The <span class="mono">offline</span> metric uses 1 = unreachable, so a threshold of 0.5 fires when a server
+      stops answering for the duration window.
+    </div>
+  </div>
+</div>
+
+<div class="glass">
+  <div class="card-head"><h3>{{ icon('link', 16) }} Webhook payload</h3>
+    <div class="actions"><span class="badge quiet">application/json</span></div>
+  </div>
+  <pre class="log">{
+  "event": "alert.firing",
+  "rule": { "id": 4, "name": "High CPU", "metric": "cpu", "threshold": 90 },
+  "server": { "uid": "srv-1a2b3c", "name": "web-prod-01" },
+  "value": 93.4,
+  "severity": "warning",
+  "at": "{{ status_now if status_now is defined else '' }}"
+}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% set server_options = [] %}
+{% for server in servers %}{% set _ = server_options.append({'uid': server.uid, 'name': server.name, 'image': server.os_image}) %}{% endfor %}
+<script id="alerts-data" type="application/json">{{ {
+  'metrics': metrics,
+  'servers': server_options,
+  'severities': severities,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/alerts.js') }}"></script>
+{% endblock %}

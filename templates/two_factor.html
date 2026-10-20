@@ -1,0 +1,39 @@
+{% extends "_auth_base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Two-factor authentication{% endblock %}
+{% block art_headline %}One more factor before we open the console.{% endblock %}
+
+{% block form %}
+  <h1>Two-factor code</h1>
+  <p class="sub">Open your authenticator app and enter the current 6-digit code for
+    <b>{{ username or 'your account' }}</b>.</p>
+  <form method="post" action="{{ url_for('auth.two_factor') }}" id="totp-form">
+    <input type="hidden" name="username" value="{{ username or '' }}">
+    <input type="hidden" name="password" value="{{ password or '' }}">
+    <div class="field">
+      <label for="totp">Authentication code</label>
+      <input class="input totp-input" id="totp" name="totp" inputmode="numeric" autocomplete="one-time-code"
+             maxlength="9" required autofocus placeholder="000000">
+      <div class="hint">Lost your device? Enter one of your single-use recovery codes instead.</div>
+    </div>
+    <button class="btn primary block lg" type="submit">{{ icon('shieldCheck', 16) }} Verify &amp; continue</button>
+  </form>
+{% endblock %}
+
+{% block footer %}
+  <div class="auth-foot"><a href="{{ url_for('auth.login') }}">Use a different account</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  SKVM.ready(function () {
+    const form = document.getElementById("totp-form");
+    const field = document.getElementById("totp");
+    field.addEventListener("input", () => {
+      field.value = field.value.replace(/[^0-9a-zA-Z-]/g, "");
+      if (field.value.replace(/\D/g, "").length === 6 && !field.value.includes("-")) form.requestSubmit();
+    });
+    SKVM.submit(form, { onSuccess(data) { window.location.assign(data.redirect || "/dashboard"); } });
+  });
+</script>
+{% endblock %}

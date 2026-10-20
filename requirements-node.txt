@@ -1,0 +1,7 @@
+# SKVM node-agent dependencies (runs on every VPS host / hypervisor node)
+Flask>=3.0,<4.0
+docker>=7.0,<8.0
+psutil>=5.9,<7.0
+requests>=2.31,<3.0
+PyYAML>=6.0
+gunicorn>=21.2

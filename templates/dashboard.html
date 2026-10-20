@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import kpi, server_card, empty_state, meter, quota_bars, timeline, banner %}
+{% block title %}Overview{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Overview</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>
+      {{ icon('grid', 22) }} Command deck
+      <span class="badge {{ 'good' if summary.error == 0 else 'crit' }}">
+        <span class="dot"></span>{{ 'All systems nominal' if summary.error == 0 else summary.error ~ ' server(s) need attention' }}
+      </span>
+    </h1>
+    <div class="sub">
+      Welcome back, {{ current_user.full_name or current_user.username }} — {{ summary.running }} of {{ summary.servers }}
+      servers running across {{ node_capacity.count }} hypervisor{{ '' if node_capacity.count == 1 else 's' }}.
+    </div>
+  </div>
+  <div class="actions">
+    <div class="segmented" id="range-toggle">
+      <button class="active" data-range="live">Live</button>
+      <button data-range="24h">24h</button>
+      <button data-range="7d">7d</button>
+    </div>
+    <a class="btn ghost" href="{{ url_for('alerts.index') }}">{{ icon('bell', 16) }} Alerts{% if open_alerts %} <span class="badge crit">{{ open_alerts | length }}</span>{% endif %}</a>
+    <a class="btn primary" href="{{ url_for('servers.new') }}">{{ icon('plus', 16) }} New server</a>
+  </div>
+</div>
+
+{% if settings_values.get('panel_notice') %}
+  <div class="notice-strip pinned">
+    {{ icon('spark', 18) }}<div>{{ settings_values.get('panel_notice') }}</div>
+    <span class="badge accent" style="margin-left:auto">{{ settings_values.get('panel_notice_level', 'info') }}</span>
+  </div>
+{% endif %}
+
+{% if not backend.docker and backend.configured != 'demo' %}
+  <div class="banner warn mb-2">
+    {{ icon('alert', 18) }}
+    <div>
+      <b>The Docker daemon is unreachable, so the panel is running its simulated driver.</b>
+      <div class="tiny muted">Everything below is fully interactive but simulated. {{ backend.docker_detail }}</div>
+    </div>
+    {% if current_user.can('admin') %}
+      <a class="btn sm ghost" style="margin-left:auto" href="{{ url_for('admin.nodes') }}">Register a node</a>
+    {% endif %}
+  </div>
+{% endif %}
+
+<section class="grid cols-4 mb-2">
+  {{ kpi('Servers', summary.servers, '', 'server', 'a', 'spark-fleet',
+         sub=summary.running ~ ' running · ' ~ summary.stopped ~ ' stopped') }}
+  {{ kpi('Fleet CPU', '%.1f' | format(summary.avg_cpu_pct or 0), '%', 'cpu', 'b', 'spark-cpu',
+         sub=(summary.live_cpu_pct or 0) | round(1) ~ '% across ' ~ summary.sampled ~ ' sampled') }}
+  {{ kpi('Memory in use', (summary.live_ram_used_mb / 1024) | round(1), 'GB', 'memory', 'c', 'spark-ram',
+         sub=(summary.ram_mb / 1024) | round(1) ~ ' GB provisioned') }}
+  {{ kpi('Monthly run-rate', summary.monthly_cost | round(2), current_user.currency, 'tag', 'd', None,
+         sub=summary.disk_gb ~ ' GB storage · ' ~ summary.bandwidth_used_gb ~ ' GB egress') }}
+</section>
+
+<section class="detail-grid mb-2">
+  <div class="glass flush">
+    <div class="card-head">
+      <h3>{{ icon('pulse', 16) }} Fleet performance</h3>
+      <div class="sub" id="chart-window">streaming · last 6 minutes</div>
+      <div class="actions">
+        <span class="live-pill" id="chart-live"><span class="pulse"></span> live</span>
+      </div>
+    </div>
+    <div style="padding:16px 18px 6px" id="fleet-chart"></div>
+  </div>
+
+  <div class="stack">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('layers', 16) }} Capacity &amp; quotas</h3></div>
+      <div class="card-body">
+        <div class="kv mb-2">
+          <dt>Hypervisors</dt><dd class="mono">{{ node_capacity.online }}/{{ node_capacity.count }} online</dd>
+          <dt>vCPU offered</dt><dd class="mono">{{ node_capacity.cpu or summary.cpu_cores }} cores</dd>
+          <dt>Memory</dt><dd class="mono">{{ ((node_capacity.ram_mb or summary.ram_mb) / 1024) | round(1) }} GB</dd>
+        </div>
+        <div class="capacity-bar mb-2">
+          <i class="cpu" style="width: {{ [summary.cpu_cores / 64 * 100, 100] | min }}%"></i>
+          <i class="ram" style="width: {{ [summary.ram_mb / 262144 * 100, 100] | min }}%"></i>
+          <i class="disk" style="width: {{ [summary.disk_gb / 4096 * 100, 100] | min }}%"></i>
+        </div>
+        <div class="row tiny dim mb-2">
+          <span><span class="dot-sep" style="background:var(--accent)"></span> CPU</span>
+          <span><span class="dot-sep" style="background:var(--accent-3)"></span> RAM</span>
+          <span><span class="dot-sep" style="background:var(--accent-4)"></span> Disk</span>
+        </div>
+        {{ quota_bars(quotas) }}
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head">
+        <h3>{{ icon('bell', 16) }} Open alerts</h3>
+        <div class="actions"><a class="btn sm quiet" href="{{ url_for('alerts.index') }}">Manage</a></div>
+      </div>
+      {% if open_alerts %}
+        <div class="mini-list" style="padding:0 16px 12px">
+          {% for event in open_alerts %}
+            <div class="row-item">
+              <span class="status-dot {{ 'critical' if event.severity == 'critical' else 'warn' }}"></span>
+              <div class="truncate">
+                <div class="truncate">{{ event.message or event.rule.name }}</div>
+                <div class="tiny dim">{{ event.rule.name }} · {{ event.human }}</div>
+              </div>
+              <button class="btn sm quiet" style="margin-left:auto" data-ack="{{ event.id }}">Ack</button>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card-body row muted small">{{ icon('check', 16) }} No unacknowledged alerts. Nice and quiet.</div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% if announcements %}
+<section class="stack mb-2">
+  {% for note in announcements %}
+    <div class="notice-strip{{ ' pinned' if note.pinned }}">
+      {{ icon('spark' if note.level == 'info' else 'alert', 18) }}
+      <div>
+        <b>{{ note.title }}</b>
+        <div class="small muted" style="white-space:pre-wrap">{{ note.body }}</div>
+      </div>
+      <span class="tiny dim" style="margin-left:auto">{{ note.created_human }}</span>
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section class="mb-2">
+  <div class="row between mb-1">
+    <h2 style="margin:0">{{ icon('server', 18) }} Your servers</h2>
+    <div class="row tight">
+      <a class="btn sm ghost" href="{{ url_for('servers.index') }}">View all {{ servers | length }}</a>
+      <a class="btn sm primary" href="{{ url_for('servers.new') }}">{{ icon('plus', 14) }} Create</a>
+    </div>
+  </div>
+  {% if servers %}
+    <div class="server-grid">
+      {% for server in servers[:6] %}{{ server_card(server) }}{% endfor %}
+    </div>
+  {% else %}
+    <div class="glass">
+      {{ empty_state('No servers yet',
+        'Provision your first instance — pick an image, size it, and you will be in a root shell within seconds.',
+        'rocket',
+        '<a class="btn primary" href="' ~ url_for('servers.new') ~ '">Create your first server</a>') }}
+    </div>
+  {% endif %}
+</section>
+
+<section class="grid cols-2">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('history', 16) }} Recent activity</h3></div>
+    <div class="card-body">
+      {% if recent_events %}{{ timeline(recent_events) }}{% else %}<p class="muted small mb-0">No activity recorded yet.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('cloud', 16) }} Platform</h3>
+      <div class="actions"><span class="badge {{ 'good' if backend.docker or backend.active == 'demo' else 'warn' }}">{{ backend.active }} driver</span></div>
+    </div>
+    <div class="card-body">
+      <div class="kv">
+        <dt>Compute driver</dt><dd class="mono">{{ backend.active }}</dd>
+        <dt>Docker engine</dt><dd>{{ 'connected' if backend.docker else backend.docker_detail }}</dd>
+        <dt>Registered nodes</dt><dd class="mono">{{ node_capacity.count }} ({{ node_capacity.online }} online)</dd>
+        <dt>Panel version</dt><dd class="mono">{{ panel.version }} · {{ panel.env }}</dd>
+        <dt>Panel URL</dt><dd class="mono truncate">{{ config.PANEL_URL }}</dd>
+      </div>
+      <div class="divider"></div>
+      <div class="row tight">
+        <a class="btn sm ghost" href="/healthz">{{ icon('activity', 14) }} Health</a>
+        <a class="btn sm ghost" href="/metrics">{{ icon('chart', 14) }} Prometheus</a>
+        <a class="btn sm ghost" href="{{ url_for('docs.index') }}">{{ icon('book', 14) }} API docs</a>
+        {% if current_user.can('operator') %}
+          <a class="btn sm ghost" href="{{ url_for('admin.index') }}">{{ icon('layers', 14) }} Admin</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/dashboard.js') }}"></script>
+{% endblock %}

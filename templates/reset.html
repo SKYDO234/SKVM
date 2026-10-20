@@ -1,0 +1,45 @@
+{% extends "_auth_base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Choose a new password{% endblock %}
+{% block art_headline %}Set a new password and rotate your sessions.{% endblock %}
+
+{% block form %}
+  <h1>Choose a new password</h1>
+  <p class="sub">Every existing session will be signed out once you save.</p>
+  {% if problems %}
+    <div class="banner crit mb-2">{{ icon('alert', 16) }}
+      <ul style="margin:0;padding-left:18px">{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+  <form method="post" action="{{ url_for('auth.reset', token=token) }}" id="reset-form">
+    <div class="field">
+      <label for="password">New password</label>
+      <input class="input" id="password" name="password" type="password" required autofocus autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label for="confirm">Confirm password</label>
+      <input class="input" id="confirm" name="confirm" type="password" required autocomplete="new-password">
+    </div>
+    <div class="pw-meter"><i id="pw-bar" style="width:0%"></i></div>
+    <div class="tiny muted mt-1" id="pw-label">Password strength</div>
+    <button class="btn primary block lg mt-2" type="submit">{{ icon('save', 16) }} Update password</button>
+  </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  SKVM.ready(function () {
+    const password = document.getElementById("password");
+    const bar = document.getElementById("pw-bar");
+    const label = document.getElementById("pw-label");
+    password.addEventListener("input", SKVM.debounce(async () => {
+      if (!password.value) return;
+      const data = await SKVM.post("/api/v1/auth/strength", { password: password.value }).catch(() => null);
+      if (!data) return;
+      bar.style.width = data.strength.score + "%";
+      bar.style.background = data.strength.color;
+      label.textContent = `${data.strength.label} · ${data.strength.score}/100`;
+    }, 200));
+  });
+</script>
+{% endblock %}

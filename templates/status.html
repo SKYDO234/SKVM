@@ -1,0 +1,131 @@
+{% if current_user %}{% extends "base.html" %}{% else %}{% extends "_auth_base.html" %}{% endif %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, kpi, empty_state, meter %}
+{% block title %}Platform status{% endblock %}
+{% block art_headline %}Everything you can see at a glance.{% endblock %}
+
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Status</strong>
+{% endblock %}
+
+{% macro _status_body() %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('activity', 22) }} Platform status</h1>
+    <div class="sub">Live availability across every hypervisor and instance in this installation.</div>
+  </div>
+  <div class="actions">
+    <span class="live-pill {{ 'crit' if status.uptime < 95 else '' }}"><span class="pulse"></span>
+      {{ '%.2f' | format(status.uptime) }}% uptime (30 d)</span>
+    <button class="btn ghost" id="status-refresh">{{ icon('refresh', 16) }} Refresh</button>
+  </div>
+</div>
+
+<section class="banner {{ 'good' if status.uptime >= 99.5 else ('warn' if status.uptime >= 95 else 'crit') }}" style="margin-bottom:18px">
+  {{ icon('check' if status.uptime >= 99.5 else 'alert', 20) }}
+  <div>
+    <b>
+      {% if status.uptime >= 99.5 %}All systems operational
+      {% elif status.uptime >= 95 %}Degraded performance
+      {% else %}Service disruption{% endif %}
+    </b>
+    <div class="tiny">{{ status.servers_running }}/{{ status.servers_total }} instances running ·
+      {{ status.nodes_online }}/{{ status.nodes_total }} hypervisors online · generated {{ status.generated_at }}</div>
+  </div>
+</section>
+
+<div class="glass card mb-2">
+  <div class="row between">
+    <h3 style="margin:0">{{ icon('chart', 16) }} 14-day availability</h3>
+    <span class="tiny dim">daily CPU-derived health per sample hour</span>
+  </div>
+  <div class="uptime-bars mt-2">
+    {% for day in history %}
+      <div class="uptime-day {{ day.state }}" data-tip="{{ day.date }} · {{ day.state }}{% if day.uptime %} · {{ day.uptime }}%{% endif %}">
+        <i style="height: {{ 100 if day.state == 'operational' else (62 if day.state == 'degraded' else (22 if day.state == 'outage' else 12)) }}%"></i>
+        <span>{{ day.date[8:] }}</span>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  {{ kpi('Instances', status.servers_total, '', 'server', 'a', sub=status.servers_running ~ ' running') }}
+  {{ kpi('Hypervisors', status.nodes_total, '', 'cloud', 'b', sub=status.nodes_online ~ ' online') }}
+  {{ kpi('Regions', status.regions | length, '', 'globe', 'c', sub=status.regions | join(', ')) }}
+  {{ kpi('Compute driver', status.backend.active, '', 'layers', 'd', sub=('docker ready' if status.backend.docker else status.backend.docker_detail) | string | truncate(42)) }}
+</section>
+
+{% if status.incidents %}
+  <div class="glass mb-2">
+    <div class="card-head"><h3>{{ icon('alert', 16) }} Incident history</h3>
+      <div class="actions"><span class="badge quiet">{{ status.incidents | length }} last 30 days</span></div>
+    </div>
+    <div class="card-body">
+      <div class="timeline">
+        {% for incident in status.incidents %}
+          <div class="event {{ 'ok' if incident.resolved_at else 'warn' }}">
+            <div>
+              <b>{{ incident.title }}</b>
+              <span class="badge {{ 'good' if incident.resolved_at else 'warn' }} tiny" style="margin-left:6px">{{ incident.status if incident.status is defined else ('resolved' if incident.resolved_at else 'investigating') }}</span>
+              {% if incident.body %}<div class="tiny muted">{{ incident.body }}</div>{% endif %}
+            </div>
+            <div class="when">started {{ incident.started_at }}{% if incident.resolved_at %} · resolved {{ incident.resolved_at }}{% endif %}</div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+{% else %}
+  <div class="glass mb-2 card row muted">{{ icon('check', 18) }} No incidents recorded in the last 30 days.</div>
+{% endif %}
+
+{% if is_staff and servers %}
+  <div class="glass flush">
+    <div class="card-head" style="padding:16px 18px 0"><h3>{{ icon('server', 16) }} Instance health (staff view)</h3></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Server</th><th>Owner</th><th>State</th><th>Driver</th><th>Health</th><th>Address</th></tr></thead>
+        <tbody>
+          {% for server in servers %}
+            {% set meta = server.status | status_meta %}
+            <tr>
+              <td><a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ server.name }}</a>
+                <div class="tiny dim mono">{{ server.uid }}</div></td>
+              <td class="tiny">{{ server.owner.username if server.owner else '—' }}</td>
+              <td>{{ badge(meta.label, meta.tone) }}</td>
+              <td class="tiny mono">{{ server.driver }}</td>
+              <td style="min-width:150px">
+                {{ meter((server.last_metrics or {}).get('cpu_pct') or 0) }}
+                <span class="tiny mono">{{ '%.0f' | format((server.last_metrics or {}).get('cpu_pct') or 0) }}% CPU</span>
+              </td>
+              <td class="tiny mono">{{ server.primary_ip() }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+{% endmacro %}
+
+{% block content %}{{ _status_body() }}{% endblock %}
+
+{% block form %}
+  {{ _status_body() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  SKVM.ready(function () {
+    document.getElementById("status-refresh")?.addEventListener("click", async function () {
+      this.classList.add("is-loading");
+      try {
+        const data = await SKVM.get("/api/v1/status");
+        SKVM.toast(`Uptime ${data.uptime}% · ${data.servers_running}/${data.servers_total} running`, "info");
+      } catch (error) { SKVM.handleError(error); }
+      finally { this.classList.remove("is-loading"); }
+    });
+  });
+</script>
+{% endblock %}

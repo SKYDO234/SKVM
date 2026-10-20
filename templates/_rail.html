@@ -1,0 +1,64 @@
+{# ---------------------------------------------------------------------------
+   Left navigation rail
+   --------------------------------------------------------------------------- #}
+{% from "_icons.html" import icon %}
+{% set endpoint = request.endpoint or '' %}
+{% macro nav_item(endpoint_name, label, icon_name, href, badge=None, match='') -%}
+  {% set active = endpoint == endpoint_name or (match and endpoint.startswith(match)) %}
+  <a class="nav-item{% if active %} active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>
+    {{ icon(icon_name, 18) }}<span>{{ label }}</span>
+    {% if badge %}<span class="badge-count">{{ badge }}</span>{% endif %}
+  </a>
+{%- endmacro %}
+<aside class="rail" id="rail">
+  <div class="brand">
+    <div class="brand-mark">{{ icon('bolt', 22) }}</div>
+    <div class="brand-text truncate">
+      <div class="brand-name">{{ panel.name }}</div>
+      <div class="brand-sub">{{ panel.tagline }}</div>
+    </div>
+  </div>
+
+  <nav class="nav-scroll">
+    <div class="nav-section">Infrastructure</div>
+    {{ nav_item('dashboard.dashboard_page', 'Overview', 'grid', url_for('dashboard.dashboard_page')) }}
+    {{ nav_item('servers.index', 'Servers', 'server', url_for('servers.index'), match='servers.') }}
+    {{ nav_item('servers.new', 'Create server', 'rocket', url_for('servers.new')) }}
+    {{ nav_item('alerts.index', 'Alerts', 'bell', url_for('alerts.index'), badge=nav_alerts if nav_alerts else None) }}
+
+    <div class="nav-section">Operations</div>
+    {{ nav_item('dashboard.status_page', 'Status page', 'activity', url_for('dashboard.status_page')) }}
+    {{ nav_item('docs.index', 'API & docs', 'book', url_for('docs.index')) }}
+
+    <div class="nav-section">Account</div>
+    {{ nav_item('account.index', 'Profile & security', 'user', url_for('account.index')) }}
+    {% if current_user %}
+      <a class="nav-item" href="{{ url_for('account.index') }}#tokens">{{ icon('key', 18) }}<span>API tokens</span></a>
+      <a class="nav-item" href="{{ url_for('account.index') }}#sessions">{{ icon('shield', 18) }}<span>Sessions</span></a>
+    {% endif %}
+
+    {% if current_user and current_user.can('operator') %}
+      <div class="nav-section">Administration</div>
+      {{ nav_item('admin.index', 'Admin overview', 'layers', url_for('admin.index'), match='admin.index') }}
+      {% if current_user.can('admin') %}
+        {{ nav_item('admin.users', 'Users', 'users', url_for('admin.users'), match='admin.users') }}
+      {% endif %}
+      {{ nav_item('admin.servers', 'All servers', 'server', url_for('admin.servers'), match='admin.servers') }}
+      {% if current_user.can('admin') %}
+        {{ nav_item('admin.nodes', 'Hypervisors', 'cloud', url_for('admin.nodes'), match='admin.nodes') }}
+        {{ nav_item('admin.settings_page', 'Panel settings', 'settings', url_for('admin.settings_page'), match='admin.settings') }}
+        {{ nav_item('admin.announcements', 'Announcements', 'bell', url_for('admin.announcements'), match='admin.announcements') }}
+      {% endif %}
+      {{ nav_item('admin.incidents', 'Incidents', 'alert', url_for('admin.incidents'), match='admin.incidents') }}
+      {{ nav_item('admin.audit_page', 'Audit trail', 'history', url_for('admin.audit_page'), match='admin.audit') }}
+    {% endif %}
+  </nav>
+
+  <div class="rail-foot">
+    <span class="dot" id="rail-status-dot"></span>
+    <div class="rail-foot-text truncate">
+      <div><b id="rail-status">{{ panel.backend }} backend</b></div>
+      <div class="tiny" id="rail-heartbeat">live telemetry</div>
+    </div>
+  </div>
+</aside>

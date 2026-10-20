@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import status_badge, badge, meter %}
+{% block title %}Console · {{ server.name }}{% endblock %}
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/xterm/xterm.css') }}">
+{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.index') }}">Servers</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ server.name }}</a><span class="sep">/</span>
+  <strong>Console</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('terminal', 22) }} {{ server.name }} {{ status_badge(server.status) }}</h1>
+    <div class="sub mono">{{ ssh_command }} · {{ server.os_image }}</div>
+  </div>
+  <div class="actions">
+    <div class="segmented" id="shell-picker">
+      <button data-shell="/bin/bash" class="active">bash</button>
+      <button data-shell="/bin/sh">sh</button>
+      <button data-shell="/bin/ash">ash</button>
+    </div>
+    <button class="btn ghost" id="btn-reconnect">{{ icon('refresh', 16) }} Reconnect</button>
+    <button class="btn ghost" data-copy="{{ ssh_command }}">{{ icon('copy', 16) }} Copy SSH</button>
+    <a class="btn ghost" href="{{ url_for('servers.files_page', uid=server.uid) }}">{{ icon('folder', 16) }} Files</a>
+    <button class="btn ghost" id="btn-fs">{{ icon('eye', 16) }} Fullscreen</button>
+  </div>
+</div>
+
+<div class="console-layout">
+  <div class="glass flush console-frame" id="console-frame">
+    <div class="console-bar">
+      <span class="lights"><i></i><i></i><i></i></span>
+      <span class="title mono">root@{{ server.hostname }} — {{ server.os_image }}</span>
+      <span class="spacer"></span>
+      <span class="conn {{ 'good' if server.running else 'warn' }}" id="conn-state">
+        <span class="pulse"></span><span id="conn-text">{{ 'connected' if server.running else server.status }}</span>
+      </span>
+      <button class="icon-btn ghost sm" id="btn-copy-sel" data-tip="Copy selection">{{ icon('copy', 15) }}</button>
+      <button class="icon-btn ghost sm" id="btn-clear" data-tip="Clear">{{ icon('trash', 15) }}</button>
+    </div>
+    <div id="terminal" class="terminal"></div>
+    <div class="console-foot">
+      <span class="tiny dim">⌘/Ctrl + V pastes · select text to copy · the session is audited</span>
+      <div class="row tight tiny dim">
+        <span id="term-size">—</span>
+        <span class="dot-sep"></span>
+        <span id="term-latency">—</span>
+      </div>
+    </div>
+  </div>
+
+  <aside class="stack console-side">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('pulse', 16) }} Live resources</h3></div>
+      <div class="card-body">
+        <div class="mini-metric">
+          <span>CPU</span><span class="mono metric-value">{{ '%.0f' | format(stats.cpu_pct or 0) }}%</span>
+          {{ meter(stats.cpu_pct or 0) }}
+        </div>
+        <div class="mini-metric">
+          <span>Memory</span><span class="mono metric-value">{{ '%.0f' | format(stats.ram_pct or 0) }}%</span>
+          {{ meter(stats.ram_pct or 0) }}
+        </div>
+        <div class="mini-metric">
+          <span>Disk</span><span class="mono metric-value">{{ '%.0f' | format(stats.disk_pct or 0) }}%</span>
+          {{ meter(stats.disk_pct or 0) }}
+        </div>
+        <div class="spark" id="console-spark"></div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('bolt', 16) }} Quick commands</h3></div>
+      <div class="card-body chips-vertical" id="quick-commands">
+        {% for label, command in [
+          ('System info', 'uname -a; uptime'),
+          ('Disk usage', 'df -h'),
+          ('Memory', 'free -m'),
+          ('Running services', 'systemctl list-units --type=service --state=running 2>/dev/null || ps aux | head -20'),
+          ('Top processes', 'ps aux --sort=-%cpu | head -12'),
+          ('Recent logins', 'last -n 12 2>/dev/null || cat /var/log/auth.log | tail -12'),
+          ('Open ports', 'ss -tulpn 2>/dev/null || netstat -tulpn'),
+          ('Update packages', 'apt-get update'),
+          ('Docker ps', 'docker ps 2>/dev/null || echo "docker not installed"')
+        ] %}
+          <button class="chip-btn" data-send="{{ command }}">{{ label }}</button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('key', 16) }} Credentials</h3></div>
+      <div class="card-body">
+        <div class="kv">
+          <dt>Host</dt><dd class="mono">{{ server.primary_ip() }}</dd>
+          <dt>Port</dt><dd class="mono">{{ server.ssh_port }}</dd>
+          <dt>User</dt><dd class="mono">{{ server.root_username }}</dd>
+          <dt>Shell</dt><dd class="mono" id="shell-state">/bin/bash</dd>
+        </div>
+        <button class="btn ghost block mt-2" data-copy="{{ ssh_command }}">{{ icon('copy', 14) }} Copy SSH command</button>
+        <a class="btn ghost block mt-1" href="{{ url_for('account.index') }}#keys">{{ icon('shieldCheck', 14) }} Manage SSH keys</a>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('alert', 16) }} Troubleshooting</h3></div>
+      <div class="card-body tiny muted stack">
+        <div>Nothing appears? The instance may still be booting — try <b>Reconnect</b> in a few seconds.</div>
+        <div>Console disabled by the administrator if the socket closes instantly (HTTP 403).</div>
+        <div>On remote hypervisors the terminal tunnels through the signed node agent.</div>
+      </div>
+    </div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/xterm/xterm.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/xterm/addon-fit.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/xterm/addon-web-links.js') }}"></script>
+<script id="console-data" type="application/json">{{ {
+  'uid': server.uid,
+  'name': server.name,
+  'status': server.status,
+  'running': server.running,
+  'ws': '/ws/server/' ~ server.uid ~ '/console',
+  'token_url': url_for('servers.console_token', uid=server.uid),
+  'series': series if series is defined else [],
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/console.js') }}"></script>
+{% endblock %}
