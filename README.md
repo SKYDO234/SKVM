@@ -101,7 +101,8 @@ clone, baked-in `/opt/venv`), so the image and a raw sandbox cannot drift apart.
 `:latest` runs unprivileged against the simulated fleet or remote node agents;
 `:docker` mounts `/var/run/docker.sock` and is therefore root-equivalent — a
 lab host, not a shared box. The `.github/workflows/publish.yml` workflow builds
-both for `linux/amd64` + `arm64` on every `v*` tag and on `main`.
+both for `linux/amd64` + `arm64` on every `v*` tag, or on a manual run from the
+Actions tab — never on an ordinary push, so merging into `main` only ever runs tests.
 
 ### Useful flags
 
