@@ -1,0 +1,81 @@
+{% extends "_auth_base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Create account{% endblock %}
+{% block art_headline %}Spin up your own sovereign cloud account.{% endblock %}
+
+{% block form %}
+  <h1>Create your account</h1>
+  <p class="sub">You will land straight in the console — quotas are assigned automatically.</p>
+
+  {% if problems %}
+    <div class="banner crit mb-2">
+      {{ icon('alert', 16) }}
+      <div>
+        <b>Please fix the following:</b>
+        <ul style="margin:6px 0 0;padding-left:18px">{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+      </div>
+    </div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('auth.register') }}" id="register-form">
+    <div class="form-grid">
+      <div class="field">
+        <label for="username">Username</label>
+        <input class="input" id="username" name="username" required value="{{ username | default('') }}" placeholder="ada">
+      </div>
+      <div class="field">
+        <label for="full_name">Full name</label>
+        <input class="input" id="full_name" name="full_name" value="{{ full_name | default('') }}" placeholder="Ada Lovelace">
+      </div>
+    </div>
+    <div class="field">
+      <label for="email">E-mail</label>
+      <input class="input" id="email" name="email" type="email" required value="{{ email | default('') }}" placeholder="you@company.com">
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="password">Password</label>
+        <input class="input" id="password" name="password" type="password" required autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="confirm">Confirm password</label>
+        <input class="input" id="confirm" name="confirm" type="password" required autocomplete="new-password">
+      </div>
+    </div>
+    <div class="pw-meter"><i id="pw-bar" style="width:0%"></i></div>
+    <div class="row between mt-1">
+      <span class="tiny muted" id="pw-label">Password strength</span>
+      <span class="tiny muted">{{ settings_values.get('allow_registration') and 'Registration open' or 'Approval required' }}</span>
+    </div>
+    <label class="checkbox mt-2"><input type="checkbox" required> <span>I agree to the acceptable-use policy</span></label>
+    <button class="btn primary block lg" type="submit">{{ icon('rocket', 16) }} Create account</button>
+  </form>
+{% endblock %}
+
+{% block footer %}
+  <div class="auth-foot">Already registered? <a href="{{ url_for('auth.login') }}">Sign in</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  SKVM.ready(function () {
+    const password = document.getElementById("password");
+    const bar = document.getElementById("pw-bar");
+    const label = document.getElementById("pw-label");
+    const score = SKVM.debounce(async () => {
+      if (!password.value) { bar.style.width = "0%"; label.textContent = "Password strength"; return; }
+      try {
+        const data = await SKVM.post("/api/v1/auth/strength", { password: password.value });
+        const meter = data.strength || {};
+        bar.style.width = (meter.score || 0) + "%";
+        bar.style.background = meter.color || "var(--accent)";
+        label.textContent = `${meter.label} · ${meter.score}/100`;
+      } catch (error) { /* offline */ }
+    }, 220);
+    password.addEventListener("input", score);
+    SKVM.submit(document.getElementById("register-form"), {
+      onSuccess(data) { window.location.assign(data.redirect || "/dashboard"); },
+    });
+  });
+</script>
+{% endblock %}

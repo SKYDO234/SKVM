@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import server_card, empty_state, kpi, quota_bars, meter %}
+{% block title %}Servers{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Servers</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('server', 22) }} Servers
+      <span class="badge accent">{{ summary.servers }} total</span>
+    </h1>
+    <div class="sub">Provision, monitor and control every instance you own. Filter by state, size or owner.</div>
+  </div>
+  <div class="actions">
+    <div class="segmented" id="view-toggle">
+      <button data-view="grid" class="active">{{ icon('grid', 14) }} Cards</button>
+      <button data-view="table">{{ icon('layers', 14) }} Table</button>
+    </div>
+    <button class="btn ghost" id="bulk-select">{{ icon('check', 16) }} Select</button>
+    <a class="btn primary" href="{{ url_for('servers.new') }}">{{ icon('plus', 16) }} New server</a>
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  {{ kpi('Running', summary.running, '', 'play', 'd', sub=summary.stopped ~ ' stopped · ' ~ summary.suspended ~ ' suspended') }}
+  {{ kpi('vCPU allocated', summary.cpu_cores, 'cores', 'cpu', 'a', sub='platform average ' ~ ((summary.cpu_cores / (summary.servers or 1)) | round(1)) ~ ' per server') }}
+  {{ kpi('Memory allocated', (summary.ram_mb / 1024) | round(1), 'GB', 'memory', 'b', sub=(summary.disk_gb) ~ ' GB disk attached') }}
+  {{ kpi('Monthly run-rate', summary.monthly_cost | round(2), current_user.currency, 'tag', 'c', sub=summary.error ~ ' error state(s)') }}
+</section>
+
+<div class="glass flush mb-2">
+  <div class="table-toolbar">
+    <form class="row tight grow" method="get" action="{{ url_for('servers.index') }}" style="flex:1">
+      <input class="input" name="q" value="{{ filters.q }}" placeholder="Search name, IP, hostname, image…" style="max-width:320px">
+      <select class="select" name="status" style="max-width:170px">
+        <option value="">All states</option>
+        {% for status in statuses %}
+          <option value="{{ status }}" {{ 'selected' if filters.status == status }}>{{ status | title }}</option>
+        {% endfor %}
+      </select>
+      <select class="select" name="sort" style="max-width:170px">
+        <option value="created" {{ 'selected' if filters.sort == 'created' }}>Newest first</option>
+        <option value="name" {{ 'selected' if filters.sort == 'name' }}>Name A→Z</option>
+        <option value="cpu" {{ 'selected' if filters.sort == 'cpu' }}>Most vCPU</option>
+        <option value="ram" {{ 'selected' if filters.sort == 'ram' }}>Most memory</option>
+        <option value="expiry" {{ 'selected' if filters.sort == 'expiry' }}>Expiring soon</option>
+        <option value="cost" {{ 'selected' if filters.sort == 'cost' }}>Highest cost</option>
+      </select>
+      <button class="btn ghost" type="submit">{{ icon('search', 15) }} Filter</button>
+      {% if filters.q or filters.status %}<a class="btn quiet sm" href="{{ url_for('servers.index') }}">Reset</a>{% endif %}
+    </form>
+    <div class="row tight">
+      <a class="btn sm ghost" href="{{ url_for('servers.index') }}?status=running">Running only</a>
+      <a class="btn sm ghost" href="{{ url_for('servers.index') }}?status=error">Errors</a>
+    </div>
+  </div>
+</div>
+
+<div id="bulk-bar" class="glass card hidden" style="position:sticky;top:calc(var(--topbar) + 8px);z-index:30;margin-bottom:16px">
+  <div class="row between">
+    <div><b id="bulk-count">0</b> servers selected</div>
+    <div class="row tight">
+      <button class="btn sm ghost" data-bulk="start">{{ icon('play', 14) }} Start</button>
+      <button class="btn sm ghost" data-bulk="restart">{{ icon('refresh', 14) }} Restart</button>
+      <button class="btn sm ghost" data-bulk="stop">{{ icon('stop', 14) }} Stop</button>
+      <button class="btn sm danger" data-bulk="delete">{{ icon('trash', 14) }} Delete</button>
+      <button class="btn sm quiet" id="bulk-clear">Clear</button>
+    </div>
+  </div>
+</div>
+
+<section id="servers-grid" class="server-grid">
+  {% for server in servers %}{{ server_card(server) }}{% endfor %}
+</section>
+
+<section id="servers-table" class="glass flush hidden">
+  <div class="table-wrap">
+    <table class="data">
+      <thead>
+        <tr>
+          <th style="width:34px"><input type="checkbox" data-check-all></th>
+          <th>Server</th><th>State</th><th>Image</th><th>Resources</th><th>Address</th>
+          <th>CPU</th><th>RAM</th><th>Cost</th><th>Expires</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for server in servers %}
+          {% set meta = server.status | status_meta %}
+          {% set stats = server.last_metrics or {} %}
+          <tr data-row="{{ server.uid }}">
+            <td><input type="checkbox" data-check="{{ server.uid }}"></td>
+            <td>
+              <a href="{{ url_for('servers.detail', uid=server.uid) }}" style="color:var(--ink-0);font-weight:550">{{ server.name }}</a>
+              <div class="tiny dim mono">{{ server.uid }} · {{ server.hostname }}</div>
+            </td>
+            <td><span class="badge {{ meta.tone }}"><span class="dot"></span>{{ meta.label }}</span></td>
+            <td class="mono tiny">{{ server.os_image }}</td>
+            <td class="mono tiny">{{ server.cpu_cores | round(0) | int }}c · {{ (server.ram_mb / 1024) | round(1) }}G · {{ server.disk_gb }}G</td>
+            <td class="mono tiny">{{ server.primary_ip() }}{% if server.ssh_port != 22 %}:{{ server.ssh_port }}{% endif %}</td>
+            <td style="min-width:110px">
+              <div class="row tight"><div style="flex:1">{{ meter(stats.get('cpu_pct') or 0) }}</div>
+              <span class="mono tiny">{{ '%.0f' | format(stats.get('cpu_pct') or 0) }}%</span></div>
+            </td>
+            <td style="min-width:110px">
+              <div class="row tight"><div style="flex:1">{{ meter(stats.get('ram_pct') or 0) }}</div>
+              <span class="mono tiny">{{ '%.0f' | format(stats.get('ram_pct') or 0) }}%</span></div>
+            </td>
+            <td class="mono tiny">{{ server.monthly_price | round(2) }} {{ server.currency }}</td>
+            <td class="tiny">{{ (server.expires_in_days ~ ' days') if server.expires_in_days is not none else '—' }}</td>
+            <td>
+              <div class="row-actions">
+                <a class="icon-btn ghost" href="{{ url_for('servers.console_page', uid=server.uid) }}" data-tip="Console">{{ icon('terminal', 15) }}</a>
+                <a class="icon-btn ghost" href="{{ url_for('servers.detail', uid=server.uid) }}" data-tip="Details">{{ icon('arrowRight', 15) }}</a>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if not servers %}
+  <div class="glass">
+    {{ empty_state('No servers match this filter',
+      'Try clearing the filters, or provision a new instance to get started.', 'search',
+      '<a class="btn primary" href="' ~ url_for('servers.new') ~ '">Create a server</a>') }}
+  </div>
+{% endif %}
+
+<section class="grid cols-2 mt-3">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('layers', 16) }} Your quota usage</h3></div>
+    <div class="card-body">{{ quota_bars(quotas) }}</div>
+  </div>
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('rocket', 16) }} Quick create</h3></div>
+    <div class="card-body">
+      <p class="muted small">Start from a preset — you can change every resource in the wizard.</p>
+      <div class="grid cols-3">
+        {% for plan in plans[:3] %}
+          <a class="plan-card" href="{{ url_for('servers.new') }}?plan={{ plan.id }}">
+            <div class="pc-name">{{ plan.label }}</div>
+            <div class="pc-price">{{ plan.price }}<small>{{ current_user.currency }}/mo</small></div>
+            <div class="tiny muted">{{ plan.cpu }} vCPU · {{ (plan.ram_mb / 1024) | round(1) }} GB · {{ plan.disk_gb }} GB</div>
+          </a>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/servers.js') }}"></script>
+{% endblock %}

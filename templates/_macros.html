@@ -1,0 +1,141 @@
+{# ==========================================================================
+   SKVM · reusable template macros
+   Import in pages with: {% from "_macros.html" import server_card, kpi ... %}
+   ========================================================================== #}
+{% from "_icons.html" import icon %}
+
+{% macro badge(label, tone='muted', pulse=false) -%}
+  <span class="badge {{ tone }}{% if pulse %} pulse-dot{% endif %}"><span class="dot"></span>{{ label }}</span>
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+  {% set meta = status | status_meta %}
+  {{ badge(meta.label, meta.tone, status in ('running', 'provisioning')) }}
+{%- endmacro %}
+
+{% macro meter(percent, tone=None, thin=true) -%}
+  {% set klass = tone or (percent | pct_class) %}
+  <div class="meter{% if thin %} thin{% endif %} {{ klass }}"><i style="width: {{ [percent or 0, 100] | min }}%"></i></div>
+{%- endmacro %}
+
+{% macro kpi(label, value, unit='', icon_name='spark', accent='a', spark_id=None, sub=None, delta=None) -%}
+  <article class="glass kpi accent-{{ accent }}">
+    <div class="top">{{ icon(icon_name, 15) }} <span>{{ label }}</span></div>
+    <div class="value">{{ value }}{% if unit %}<small>{{ unit }}</small>{% endif %}</div>
+    {% if delta %}<div class="delta {{ delta.tone }}">{{ delta.text }}</div>{% endif %}
+    {% if sub %}<div class="tiny muted">{{ sub }}</div>{% endif %}
+    {% if spark_id %}<div class="spark" id="{{ spark_id }}"></div>{% endif %}
+  </article>
+{%- endmacro %}
+
+{% macro empty_state(title, message, icon_name='box', action_html=None) -%}
+  <div class="empty">
+    {{ icon(icon_name, 42) }}
+    <h3>{{ title }}</h3>
+    <p class="muted">{{ message }}</p>
+    {% if action_html %}{{ action_html | safe }}{% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro server_card(server, compact=false) -%}
+  {% set meta = server.status | status_meta %}
+  {% set os = server.os_image %}
+  <article class="glass server-card hover-lift" data-server="{{ server.uid }}">
+    <div class="head">
+      <div class="os-logo">{% if 'ubuntu' in os %}🟠{% elif 'debian' in os %}🔴{% elif 'alpine' in os %}🏔️{% elif 'rocky' in os or 'rhel' in os %}🟢{% elif 'arch' in os %}🔵{% else %}◍{% endif %}</div>
+      <div class="truncate" style="flex:1;min-width:0">
+        <a class="name truncate" href="{{ url_for('servers.detail', uid=server.uid) }}">{{ server.name }}</a>
+        <div class="meta">
+          <span class="status-dot {{ meta.tone }}"></span>{{ meta.label }}
+          <span class="dot-sep"></span>
+          <span class="mono">{{ server.primary_ip() }}</span>
+        </div>
+      </div>
+      <div class="dropdown">
+        <button class="icon-btn ghost" data-dropdown aria-label="Server menu">{{ icon('menu', 16) }}</button>
+        <div class="dropdown-menu">
+          <a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ icon('gauge') }} Overview</a>
+          <a href="{{ url_for('servers.console_page', uid=server.uid) }}">{{ icon('terminal') }} Console</a>
+          <a href="{{ url_for('servers.files_page', uid=server.uid) }}">{{ icon('folder') }} Files</a>
+          <a href="{{ url_for('servers.metrics_page', uid=server.uid) }}">{{ icon('activity') }} Metrics</a>
+          <hr>
+          <button data-copy="{{ server.ssh_command() }}" data-copy-label="SSH command">{{ icon('copy') }} Copy SSH command</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="specs">
+      <div class="item"><b>{{ server.cpu_cores | round(1) if server.cpu_cores % 1 else server.cpu_cores | int }}</b><span>vCPU</span></div>
+      <div class="item"><b>{{ (server.ram_mb / 1024) | round(1) }}</b><span>GB RAM</span></div>
+      <div class="item"><b>{{ server.disk_gb }}</b><span>GB SSD</span></div>
+    </div>
+
+    {% set stats = server.last_metrics or {} %}
+    <div style="display:grid;gap:7px">
+      <div class="metric-row">
+        <span class="metric-label">CPU</span>
+        <div style="flex:1">{{ meter(stats.get('cpu_pct') or 0) }}</div>
+        <span class="metric-value">{{ '%.1f' | format(stats.get('cpu_pct') or 0) }}%</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-label">Memory</span>
+        <div style="flex:1">{{ meter(stats.get('ram_pct') or 0) }}</div>
+        <span class="metric-value">{{ '%.1f' | format(stats.get('ram_pct') or 0) }}%</span>
+      </div>
+    </div>
+
+    {% if not compact %}
+      <div class="actions">
+        {% if server.running %}
+          <button class="btn sm ghost" data-power="{{ server.uid }}" data-action="restart">{{ icon('refresh', 14) }} Restart</button>
+          <button class="btn sm ghost" data-power="{{ server.uid }}" data-action="stop">{{ icon('stop', 14) }} Stop</button>
+        {% elif server.status == 'suspended' %}
+          <button class="btn sm ghost" data-power="{{ server.uid }}" data-action="resume">{{ icon('play', 14) }} Resume</button>
+        {% else %}
+          <button class="btn sm primary" data-power="{{ server.uid }}" data-action="start">{{ icon('play', 14) }} Start</button>
+        {% endif %}
+        <a class="btn sm ghost" href="{{ url_for('servers.console_page', uid=server.uid) }}">{{ icon('terminal', 14) }} Console</a>
+      </div>
+    {% endif %}
+  </article>
+{%- endmacro %}
+
+{% macro stat_strip(items) -%}
+  <div class="stat-strip">
+    {% for item in items %}
+      <div class="item">
+        <div class="label">{{ item.label }}</div>
+        <div class="val">{{ item.value }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro banner(message, tone='info', icon_name='info') -%}
+  <div class="banner {{ tone }}">{{ icon(icon_name, 18) }} <div>{{ message | safe }}</div></div>
+{%- endmacro %}
+
+{% macro quota_bars(quota) -%}
+  <div class="stack">
+    {% for row in quota.rows %}
+      <div class="quota-row">
+        <div class="top">
+          <span>{{ row.label }}</span>
+          <span class="mono">{{ row.used | round(2) }} / {{ row.limit | round(0) }} {{ row.unit }}</span>
+        </div>
+        {{ meter(row.percent) }}
+      </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+{% macro timeline(events) -%}
+  <div class="timeline">
+    {% for event in events %}
+      <div class="event {{ event.status }}">
+        <div><b>{{ event.action }}</b> — {{ event.message or 'no details' }}</div>
+        <div class="when">{{ event.human }} · {{ event.actor }}</div>
+      </div>
+    {% endfor %}
+  </div>
+{%- endmacro %}

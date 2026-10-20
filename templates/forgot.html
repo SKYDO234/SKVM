@@ -1,0 +1,25 @@
+{% extends "_auth_base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Reset password{% endblock %}
+{% block art_headline %}Locked out? Let's get you back in.{% endblock %}
+
+{% block form %}
+  <h1>Reset your password</h1>
+  <p class="sub">We will mail a single-use link that expires in 60 minutes.</p>
+  <form method="post" action="{{ url_for('auth.forgot') }}">
+    <div class="field">
+      <label for="identifier">Username or e-mail</label>
+      <input class="input" id="identifier" name="identifier" required autofocus placeholder="you@company.com">
+    </div>
+    <button class="btn primary block lg" type="submit">{{ icon('mail', 16) }} Send reset link</button>
+  </form>
+  <div class="banner info mt-3 tiny">{{ icon('info', 16) }} <div>For security we never reveal whether an account exists.</div></div>
+{% endblock %}
+
+{% block footer %}
+  <div class="auth-foot"><a href="{{ url_for('auth.login') }}">Back to sign in</a></div>
+{% endblock %}
+
+{% block scripts %}
+<script>SKVM.ready(() => SKVM.submit(document.querySelector("form")));</script>
+{% endblock %}

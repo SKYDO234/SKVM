@@ -1,0 +1,72 @@
+{% from "_icons.html" import icon %}
+<!doctype html>
+<html lang="en" data-theme="{{ (current_user.theme if current_user else 'midnight') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}Sign in{% endblock %} · {{ panel.name }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+<div class="grid-overlay" aria-hidden="true"></div>
+<div class="noise" aria-hidden="true"></div>
+
+<div class="auth-shell">
+  <section class="auth-art">
+    <span class="orb a"></span><span class="orb b"></span>
+    <div class="row tight" style="position:relative">
+      <span class="brand-mark">{{ icon('bolt', 22) }}</span>
+      <div>
+        <div class="brand-name" style="font-size:16px">{{ panel.name }}</div>
+        <div class="brand-sub">{{ panel.tagline }}</div>
+      </div>
+    </div>
+
+    <div style="position:relative;margin:auto 0">
+      <h2>{% block art_headline %}Provision, observe and operate every server from one glass cockpit.{% endblock %}</h2>
+      <p class="muted" style="max-width:46ch">{% block art_lede %}Real-time metrics, an in-browser root console, snapshot rollbacks, alerting and a signed
+        node-agent API — all in a single control plane you can self-host.{% endblock %}</p>
+      <div class="feature-list mt-3">
+        <div class="feature">{{ icon('pulse', 18) }}<div><b>Live telemetry</b><span>Streaming CPU, memory, disk and network with 6-minute retention in the browser and 30 days on disk.</span></div></div>
+        <div class="feature">{{ icon('terminal', 18) }}<div><b>Instant console</b><span>Root shell over WebSocket, plus a file manager with editor, uploads and share links.</span></div></div>
+        <div class="feature">{{ icon('shieldCheck', 18) }}<div><b>Hardened by default</b><span>CSRF, rate limits, scoped API tokens, TOTP 2FA, session revocation and a full audit trail.</span></div></div>
+      </div>
+    </div>
+
+    <div class="tiny dim" style="position:relative">
+      {% block art_footer %}Self-hosted · Docker-native · no telemetry leaves your infrastructure{% endblock %}
+    </div>
+  </section>
+
+  <section class="auth-form-wrap">
+    <div class="glass auth-card">
+      <div class="brand">
+        <div class="brand-mark">{{ icon('bolt', 20) }}</div>
+        <div class="brand-text">
+          <div class="brand-name">{{ panel.name }}</div>
+          <div class="brand-sub">{{ panel.tagline }}</div>
+        </div>
+      </div>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="banner {{ 'crit' if category == 'error' else ('warn' if category == 'warning' else 'good') }} mb-2">
+            {{ icon('alert' if category == 'error' else 'info', 16) }}<div>{{ message }}</div>
+          </div>
+        {% endfor %}
+      {% endwith %}
+      {% block form %}{% endblock %}
+      {% block footer %}{% endblock %}
+    </div>
+    <div class="auth-legal">{{ panel.name }} {{ panel.version }} · {{ panel.env }}</div>
+  </section>
+</div>
+
+<div class="toasts" role="status" aria-live="polite"></div>
+<script src="{{ url_for('static', filename='js/skvm.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

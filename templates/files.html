@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import status_badge, empty_state, meter %}
+{% block title %}Files · {{ server.name }}{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.index') }}">Servers</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ server.name }}</a><span class="sep">/</span>
+  <strong>Files</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('folder', 22) }} File manager {{ status_badge(server.status) }}</h1>
+    <div class="sub">Browse, edit and transfer files inside <span class="mono">{{ server.container_id or server.uid }}</span>.
+      Uploads stream through the panel — nothing is mounted from your machine.</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-new-folder">{{ icon('folder', 16) }} New folder</button>
+    <button class="btn ghost" id="btn-new-file">{{ icon('file', 16) }} New file</button>
+    <button class="btn primary" id="btn-upload">{{ icon('upload', 16) }} Upload</button>
+    <a class="btn ghost" href="{{ url_for('servers.console_page', uid=server.uid) }}">{{ icon('terminal', 16) }} Console</a>
+  </div>
+</div>
+
+<div class="glass flush mb-2">
+  <div class="file-toolbar">
+    <div class="row tight grow" style="flex:1;min-width:0">
+      <button class="icon-btn ghost" id="btn-back" data-tip="Parent directory">{{ icon('arrowLeft', 16) }}</button>
+      <button class="icon-btn ghost" id="btn-refresh" data-tip="Reload">{{ icon('refresh', 16) }}</button>
+      <nav class="breadcrumbs" id="breadcrumbs"></nav>
+    </div>
+    <div class="row tight">
+      <div class="input-group" style="max-width:260px">
+        <input class="input" id="search-input" placeholder="Search this folder…">
+        <button class="btn ghost" id="btn-search">{{ icon('search', 16) }}</button>
+      </div>
+      <select class="select" id="sort-select" style="max-width:160px">
+        <option value="name">Sort: name</option>
+        <option value="size">Sort: size</option>
+        <option value="modified">Sort: modified</option>
+        <option value="type">Sort: type</option>
+      </select>
+    </div>
+  </div>
+  <div class="usage-strip">
+    <div class="row tight" style="flex:1">
+      <span class="tiny dim" id="usage-label">—</span>
+    </div>
+    <div style="min-width:220px">{{ meter(0, 'accent', true) }}</div>
+  </div>
+</div>
+
+<div class="files-layout">
+  <div class="glass flush" id="file-panel">
+    <div class="table-wrap">
+      <table class="data file-table">
+        <thead>
+          <tr>
+            <th style="width:34px"><input type="checkbox" id="check-all"></th>
+            <th>Name</th><th style="width:110px">Size</th><th style="width:110px">Mode</th>
+            <th style="width:150px">Modified</th><th style="width:190px"></th>
+          </tr>
+        </thead>
+        <tbody id="file-rows">
+          <tr><td colspan="6" class="skeleton-cell"><div class="skeleton"></div></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="file-foot">
+      <span class="tiny dim" id="file-count">loading…</span>
+      <div class="row tight" id="bulk-actions">
+        <button class="btn sm quiet hidden" data-bulk-files="download">{{ icon('download', 13) }} Download</button>
+        <button class="btn sm quiet hidden" data-bulk-files="copy">{{ icon('copy', 13) }} Copy</button>
+        <button class="btn sm quiet hidden" data-bulk-files="chmod">{{ icon('shield', 13) }} chmod</button>
+        <button class="btn sm quiet hidden" data-bulk-files="share">{{ icon('link', 13) }} Share</button>
+        <button class="btn sm danger-ghost hidden" data-bulk-files="delete">{{ icon('trash', 13) }} Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <aside class="stack files-side">
+    <div class="glass">
+      <div class="card-head"><h3 id="editor-title">{{ icon('file', 16) }} Editor</h3>
+        <div class="actions">
+          <button class="btn sm ghost hidden" id="btn-save">{{ icon('save', 14) }} Save</button>
+          <button class="btn sm quiet hidden" id="btn-download-file">{{ icon('download', 14) }}</button>
+        </div>
+      </div>
+      <div class="card-body" style="padding-top:6px">
+        <div id="editor-empty" class="tiny muted">Select a text file to open it here. Binary files offer a download instead.</div>
+        <textarea class="input mono editor hidden" id="editor" spellcheck="false" rows="18"></textarea>
+        <div class="tiny dim mt-1 hidden" id="editor-meta"></div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('terminal', 16) }} Tail log</h3>
+        <div class="actions">
+          <select class="select sm" id="tail-lines">
+            <option value="50">50</option><option value="200" selected>200</option><option value="1000">1000</option>
+          </select>
+          <button class="btn sm quiet" id="btn-tail">{{ icon('play', 13) }}</button>
+        </div>
+      </div>
+      <pre class="log hidden" id="tail-output"></pre>
+      <div class="card-body tiny muted" id="tail-hint">Pick a file with the <b>tail</b> action to stream its last lines.</div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('link', 16) }} Shared links</h3></div>
+      <div id="share-list" class="card-body tiny muted">Create a share token from any file row to publish a one-time download link.</div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('info', 16) }} Permissions</h3></div>
+      <div class="card-body">
+        <div class="field"><label for="chmod-input">chmod (octal)</label>
+          <div class="input-group">
+            <input class="input mono" id="chmod-input" value="644" maxlength="4">
+            <button class="btn ghost" id="btn-chmod">{{ icon('check', 15) }}</button>
+          </div>
+          <div class="hint">Applies to the selected entries.</div>
+        </div>
+        <div class="chips">
+          {% for mode in ['644', '600', '664', '755', '700', '777'] %}
+            <button class="chip chip-btn" data-chmod-preset="{{ mode }}">{{ mode }}</button>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<input type="file" id="file-input" multiple class="hidden">
+<div class="upload-tray hidden" id="upload-tray">
+  <div class="glass card">
+    <div class="row between"><b id="upload-title">Uploading…</b><button class="icon-btn ghost" id="upload-close">{{ icon('x', 15) }}</button></div>
+    <div class="meter mt-1"><i id="upload-bar" style="width:0%"></i></div>
+    <div class="tiny dim mt-1" id="upload-detail"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="files-data" type="application/json">{{ {
+  'uid': server.uid,
+  'name': server.name,
+  'root': '/root',
+  'server_status': server.status,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/files.js') }}"></script>
+{% endblock %}

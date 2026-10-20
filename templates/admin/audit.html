@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Audit trail{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Audit</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('history', 22) }} Audit trail <span class="badge quiet">{{ total }} total</span></h1>
+    <div class="sub">Every state-changing action — logins, creates, deletes, settings, API calls. Filterable, exportable for compliance.</div>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="?format=csv">{{ icon('download', 16) }} Export CSV</a>
+    <a class="btn ghost" href="{{ url_for('admin.audit_page') }}">{{ icon('refresh', 16) }} Refresh</a>
+    <a class="btn ghost" href="{{ url_for('admin.audit_page') }}?days=7">7 d</a>
+    <a class="btn ghost" href="{{ url_for('admin.audit_page') }}?days=30">30 d</a>
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  <div class="glass kpi accent-a"><div class="top">{{ icon('history', 14) }} <span>Window</span></div><div class="value">{{ stats.window_days | default(7) }}<small>days</small></div><div class="tiny muted">{{ stats.since | default('') }}</div></div>
+  <div class="glass kpi accent-b"><div class="top">{{ icon('activity', 14) }} <span>Events</span></div><div class="value">{{ stats.total | default(0) }}</div><div class="tiny muted">{{ stats.failures | default(0) }} failures</div></div>
+  <div class="glass kpi accent-c"><div class="top">{{ icon('alert', 14) }} <span>Top action</span></div><div class="value" style="font-size:1.1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ stats.top_actions[0].action if stats.top_actions else '—' }}</div><div class="tiny muted">{{ stats.top_actions[0].count if stats.top_actions else 0 }} hits</div></div>
+  <div class="glass kpi accent-d"><div class="top">{{ icon('database', 14) }} <span>Paged</span></div><div class="value">{{ page }} / {{ pages }}</div><div class="tiny muted">{{ entries | length }} on this page</div></div>
+</section>
+
+<form class="glass flush mb-2" method="get">
+  <div class="table-toolbar">
+    <div class="row tight grow" style="flex:1">
+      <input class="input" name="actor" value="{{ filters.actor }}" placeholder="Actor (user, token:…, system)" style="max-width:210px">
+      <select class="select" name="action" style="max-width:210px">
+        <option value="">All actions</option>
+        {% for a in actions %}<option value="{{ a }}" {{ 'selected' if filters.action==a }}>{{ a }}</option>{% endfor %}
+      </select>
+      <select class="select" name="result" style="max-width:150px">
+        <option value="">Any result</option>
+        {% for r in ['ok','warn','error','denied'] %}<option value="{{ r }}" {{ 'selected' if filters.result==r }}>{{ r }}</option>{% endfor %}
+      </select>
+      <select class="select" name="channel" style="max-width:140px">
+        <option value="">web + api</option>
+        <option value="web" {{ 'selected' if filters.channel=='web' }}>web</option>
+        <option value="api" {{ 'selected' if filters.channel=='api' }}>api</option>
+        <option value="system" {{ 'selected' if filters.channel=='system' }}>system</option>
+      </select>
+      <input class="input" name="since" value="{{ filters.since }}" placeholder="since 2025-01-01" style="max-width:160px">
+    </div>
+    <button class="btn ghost" type="submit">{{ icon('filter', 15) }} Filter</button>
+    <a class="btn quiet sm" href="{{ url_for('admin.audit_page') }}">Reset</a>
+  </div>
+</form>
+
+{% if stats.top_actions %}
+<div class="glass mb-2">
+  <div class="card-head"><h3>{{ icon('chart', 16) }} Top actions (window)</h3></div>
+  <div class="chips" style="padding:12px 16px">
+    {% for row in stats.top_actions %}<span class="chip" style="pointer-events:none">{{ row.action }} <span class="badge quiet">{{ row.count }}</span></span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="glass flush">
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th><th>Result</th><th>IP / channel</th><th></th></tr></thead>
+      <tbody>
+        {% for e in entries %}
+          <tr>
+            <td class="tiny">{{ e.ts | fmt_dt }}<div class="tiny dim">{{ e.ts | human_delta if e.ts is not string else e.ts }}</div></td>
+            <td class="tiny">{{ e.actor }}<div class="tiny dim mono">{{ e.actor_id or '' }}</div></td>
+            <td class="mono tiny">{{ e.action }}</td>
+            <td class="tiny">{{ e.target_type }} <b>{{ e.target_label or e.target_id }}</b></td>
+            <td><span class="badge {{ 'good' if e.result=='ok' else ('warn' if e.result=='warn' else 'crit') }}">{{ e.result }}</span></td>
+            <td class="mono tiny">{{ e.ip }}<div class="tiny dim">{{ e.channel }}</div></td>
+            <td class="tiny mono truncate" style="max-width:180px">{{ e.meta | tojson if e.meta else '' }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="center muted small">No events for this filter.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="card-foot">
+    <span class="tiny dim">Page {{ page }} of {{ pages }} · {{ total }} total</span>
+    <div class="spacer"></div>
+    {% if page>1 %}<a class="btn sm ghost" href="?page={{ page-1 }}&actor={{ filters.actor }}&action={{ filters.action }}&result={{ filters.result }}&channel={{ filters.channel }}">{{ icon('arrowLeft', 13) }} Prev</a>{% endif %}
+    {% if page<pages %}<a class="btn sm ghost" href="?page={{ page+1 }}&actor={{ filters.actor }}&action={{ filters.action }}&result={{ filters.result }}&channel={{ filters.channel }}">Next {{ icon('arrowRight', 13) }}</a>{% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, status_badge, meter, kpi, empty_state, quota_bars, timeline, banner %}
+{% set meta = server.status | status_meta %}
+{% block title %}{{ server.name }}{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.index') }}">Servers</a><span class="sep">/</span>
+  <strong>{{ server.name }}</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>
+      <span class="server-glyph" style="--tone: var(--{{ meta.tone }})">{{ icon('server', 20) }}</span>
+      {{ server.name }}
+      {{ status_badge(server.status) }}
+      {% if server.driver == 'demo' %}<span class="badge quiet tiny">{{ icon('spark', 12) }} simulated</span>{% endif %}
+    </h1>
+    <div class="sub">
+      <span class="mono">{{ server.uid }}</span> · {{ server.os_image }} · {{ server.hostname }}
+      {% if server.tags %}· {% for tag in server.tags %}<span class="tag">{{ tag }}</span>{% endfor %}{% endif %}
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-sync" data-tip="Re-read container state from the driver">{{ icon('refresh', 16) }} Sync</button>
+    {% if console_enabled %}
+      <a class="btn ghost" href="{{ url_for('servers.console_page', uid=server.uid) }}">{{ icon('terminal', 16) }} Console</a>
+    {% endif %}
+    {% if filesystem_ok %}
+      <a class="btn ghost" href="{{ url_for('servers.files_page', uid=server.uid) }}">{{ icon('folder', 16) }} Files</a>
+    {% endif %}
+    <a class="btn ghost" href="{{ url_for('servers.metrics_page', uid=server.uid) }}">{{ icon('pulse', 16) }} Metrics</a>
+    <div class="dropdown">
+      <button class="btn primary" data-dropdown>{{ icon('bolt', 16) }} Power</button>
+      <div class="dropdown-menu">
+        <button data-power="{{ server.uid }}" data-action="start">{{ icon('play') }} Start</button>
+        <button data-power="{{ server.uid }}" data-action="restart">{{ icon('refresh') }} Restart</button>
+        <button data-power="{{ server.uid }}" data-action="stop">{{ icon('stop') }} Stop</button>
+        <hr>
+        {% if current_user.can('admin') %}
+          <button data-power="{{ server.uid }}" data-action="suspend">{{ icon('pause') }} Suspend (billing)</button>
+          <button data-power="{{ server.uid }}" data-action="resume">{{ icon('play') }} Resume</button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if server.status == 'error' and server.last_error %}
+  <div class="banner crit mb-2">{{ icon('alert', 18) }}
+    <div><b>Last error</b><div class="tiny mono">{{ server.last_error }}</div></div>
+    <button class="btn sm ghost" id="btn-retry" style="margin-left:auto">Retry provisioning</button>
+  </div>
+{% endif %}
+{% if server.suspended_reason %}
+  <div class="banner warn mb-2">{{ icon('pause', 18) }}
+    <div><b>Suspended</b><div class="small">{{ server.suspended_reason }}</div></div>
+  </div>
+{% endif %}
+
+<section class="grid cols-4 mb-2">
+  {% set stat_tiles = [
+    ('CPU', '%.1f' | format(stats.cpu_pct or 0), '%', 'cpu', 'cpu-live'),
+    ('Memory', '%.1f' | format(stats.ram_pct or 0), '%', 'memory', 'ram-live'),
+    ('Disk', ('%.1f' | format(stats.disk_pct)) if stats.disk_pct is not none else '—', '%', 'disk', 'disk-live'),
+    ('Network', '%.0f' | format(stats.net_rx_kbps or 0), 'KB/s in', 'wifi', 'net-live')
+  ] %}
+  {% for label, value, unit, ico, sid in stat_tiles %}
+    <div class="glass kpi" data-kpi="{{ sid }}">
+      <div class="kpi-top"><span class="kpi-ico">{{ icon(ico, 16) }}</span><span class="kpi-label">{{ label }}</span></div>
+      <div class="kpi-value"><span class="value metric-value">{{ value }}</span><small>{{ unit }}</small></div>
+      {% if loop.index <= 3 %}
+        <div class="meter mt-1"><i style="width: {{ 0 if value == '—' else [value | float, 100] | min }}%"></i></div>
+      {% endif %}
+      <div class="spark" id="spark-{{ sid }}"></div>
+    </div>
+  {% endfor %}
+</section>
+
+<section class="detail-grid mb-2">
+  <div class="stack">
+    <div class="glass flush">
+      <div class="card-head">
+        <h3>{{ icon('pulse', 16) }} Live telemetry</h3>
+        <div class="sub"><span class="pulse"></span> streaming via <span class="mono">/ws/server/{{ server.uid }}/metrics</span></div>
+        <div class="actions">
+          <div class="segmented" id="live-window">
+            <button class="active" data-window="live">6 min</button>
+            <button data-window="1h">1 h</button>
+            <button data-window="24h">24 h</button>
+            <button data-window="7d">7 d</button>
+          </div>
+        </div>
+      </div>
+      <div style="padding:14px 18px 4px" id="server-chart"></div>
+      <div class="chart-foot">
+        <span class="tiny dim">Samples kept 30 days · alert thresholds evaluated every 10 s</span>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i> CPU</span>
+          <span><i style="background:var(--accent-3)"></i> Memory</span>
+          <span><i style="background:var(--accent-4)"></i> Net in</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="tabs" data-tabs>
+        <button class="tab active" data-tab="overview">{{ icon('info', 14) }} Overview</button>
+        <button class="tab" data-tab="snapshots">{{ icon('camera', 14) }} Snapshots <span class="badge quiet">{{ snapshots | length }}</span></button>
+        <button class="tab" data-tab="backups">{{ icon('archive', 14) }} Backups <span class="badge quiet">{{ backups | length }}</span></button>
+        <button class="tab" data-tab="events">{{ icon('history', 14) }} Events</button>
+        <button class="tab" data-tab="settings">{{ icon('settings', 14) }} Settings</button>
+        <button class="tab" data-tab="danger">{{ icon('alert', 14) }} Danger</button>
+      </div>
+
+      <div class="tab-panel active" data-tab-panel="overview">
+        <div class="grid cols-3">
+          <div class="kv">
+            <dt>Status</dt><dd>{{ status_badge(server.status) }}</dd>
+            <dt>Image</dt><dd class="mono">{{ server.os_image }}</dd>
+            <dt>Plan</dt><dd>{{ server.plan }}</dd>
+            <dt>Type</dt><dd>{{ server.server_type }}</dd>
+            <dt>Region</dt><dd>{{ server.node.region if server.node else 'local' }}</dd>
+            <dt>Hypervisor</dt><dd>{{ server.node.name if server.node else backend.label }}</dd>
+          </div>
+          <div class="kv">
+            <dt>vCPU</dt><dd class="mono">{{ server.cpu_cores | round(0) | int }}</dd>
+            <dt>Memory</dt><dd class="mono">{{ (server.ram_mb / 1024) | round(1) }} GB</dd>
+            <dt>Disk</dt><dd class="mono">{{ server.disk_gb }} GB</dd>
+            <dt>Swap</dt><dd class="mono">{{ server.swap_mb }} MB</dd>
+            <dt>Load (1m)</dt><dd class="mono">{{ stats.load1 or 0 }}</dd>
+            <dt>Processes</dt><dd class="mono">{{ stats.procs or 0 }}</dd>
+          </div>
+          <div class="kv">
+            <dt>IPv4</dt><dd class="mono">{{ server.primary_ip() }}</dd>
+            <dt>IPv6</dt><dd class="mono">{{ server.ipv6_address or '—' }}</dd>
+            <dt>SSH port</dt><dd class="mono">{{ server.ssh_port }}</dd>
+            <dt>Container</dt><dd class="mono truncate">{{ server.container_id or '—' }}</dd>
+            <dt>Uptime</dt><dd>{{ (server.uptime_seconds // 3600) }} h</dd>
+            <dt>Booted</dt><dd class="tiny">{{ server.last_boot_at or server.created_at }}</dd>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="grid cols-2">
+          <div>
+            <h4>Network</h4>
+            <div class="kv">
+              <dt>Traffic in</dt><dd class="mono">{{ '%.0f' | format(stats.net_rx_kbps or 0) }} KB/s</dd>
+              <dt>Traffic out</dt><dd class="mono">{{ '%.0f' | format(stats.net_tx_kbps or 0) }} KB/s</dd>
+              <dt>Bandwidth used</dt><dd class="mono">{{ server.bandwidth_used_gb }} / {{ server.bandwidth_gb }} GB</dd>
+            </div>
+            <div class="meter mt-1"><i style="width: {{ [server.bandwidth_used_gb / (server.bandwidth_gb or 1) * 100, 100] | min }}%"></i></div>
+          </div>
+          <div>
+            <h4>Billing</h4>
+            <div class="kv">
+              <dt>Price</dt><dd class="mono">{{ server.monthly_price | round(2) }} {{ server.currency }}/mo</dd>
+              <dt>Auto renew</dt><dd>{{ 'yes' if server.auto_renew else 'no' }}</dd>
+              <dt>Expires</dt><dd>{{ server.expires_at or 'never' }} ({{ server.expires_in_days }} days)</dd>
+            </div>
+            {% if server.owner_id != current_user.id %}<div class="tiny dim mt-1">Owned by {{ server.owner.username }}</div>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-tab-panel="snapshots">
+        <div class="row between mb-2">
+          <p class="muted small mb-0">Point-in-time images of the container filesystem. Restoring stops the server briefly.</p>
+          <button class="btn sm primary" data-action="snapshot-create">{{ icon('camera', 14) }} Take snapshot</button>
+        </div>
+        {% if snapshots %}
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Name</th><th>State</th><th>Size</th><th>Created</th><th>By</th><th></th></tr></thead>
+              <tbody>
+                {% for snap in snapshots %}
+                  <tr>
+                    <td><b>{{ snap.name }}</b>{% if snap.description %}<div class="tiny dim">{{ snap.description }}</div>{% endif %}</td>
+                    <td>{{ badge(snap.state, 'good' if snap.state == 'available' else 'warn') }}</td>
+                    <td class="mono tiny">{{ (snap.size_mb / 1024) | round(2) }} GB</td>
+                    <td class="tiny">{{ snap.created_at }}</td>
+                    <td class="tiny">{{ snap.created_by }}</td>
+                    <td class="row-actions" style="justify-content:flex-end">
+                      <button class="btn sm ghost" data-snapshot-restore="{{ snap.id }}">{{ icon('history', 13) }} Restore</button>
+                      <button class="btn sm quiet" data-snapshot-delete="{{ snap.id }}">{{ icon('trash', 13) }}</button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}{{ empty_state('No snapshots yet', 'Snapshots capture the whole filesystem and restore in seconds.', 'camera') }}{% endif %}
+      </div>
+
+      <div class="tab-panel" data-tab-panel="backups">
+        <div class="row between mb-2">
+          <p class="muted small mb-0">Tarball backups stored on the panel host with SHA-256 checksums.</p>
+          <button class="btn sm primary" data-action="backup-create">{{ icon('archive', 14) }} Create backup</button>
+        </div>
+        {% if backups %}
+          <div class="table-wrap">
+            <table class="data">
+              <thead><tr><th>Name</th><th>Kind</th><th>Size</th><th>Checksum</th><th>Expires</th><th></th></tr></thead>
+              <tbody>
+                {% for item in backups %}
+                  <tr>
+                    <td><b>{{ item.name }}</b><div class="tiny dim">{{ item.created_at }}</div></td>
+                    <td>{{ badge(item.kind, 'accent') }}</td>
+                    <td class="mono tiny">{{ item.size_mb }} MB</td>
+                    <td class="mono tiny truncate" style="max-width:160px">{{ (item.checksum or '—')[:16] }}</td>
+                    <td class="tiny">{{ item.expires_at or 'never' }}</td>
+                    <td class="row-actions" style="justify-content:flex-end">
+                      <a class="btn sm ghost" href="{{ url_for('servers.backup_download', uid=server.uid, backup_id=item.id) }}">{{ icon('download', 13) }} Download</a>
+                      <button class="btn sm quiet" data-backup-delete="{{ item.id }}">{{ icon('trash', 13) }}</button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}{{ empty_state('No backups yet', 'Backups are written next to the panel and expire automatically.', 'archive') }}{% endif %}
+      </div>
+
+      <div class="tab-panel" data-tab-panel="events">
+        {{ timeline(events) }}
+      </div>
+
+      <div class="tab-panel" data-tab-panel="settings">
+        <form id="server-settings" class="form-grid">
+          <div class="field"><label for="s-name">Name</label>
+            <input class="input" id="s-name" name="name" value="{{ server.name }}" maxlength="48"></div>
+          <div class="field"><label for="s-hostname">Hostname</label>
+            <input class="input" id="s-hostname" name="hostname" value="{{ server.hostname }}"></div>
+          <div class="field"><label for="s-tags">Tags</label>
+            <input class="input" id="s-tags" name="tags" value="{{ server.tags | join(', ') }}"></div>
+          <div class="field"><label for="s-backup-schedule">Backup schedule (cron)</label>
+            <input class="input mono" id="s-backup-schedule" name="backup_schedule" value="{{ server.backup_schedule }}"></div>
+          <div class="field full"><label for="s-notes">Notes</label>
+            <textarea class="input" id="s-notes" name="notes" rows="2">{{ server.notes }}</textarea></div>
+          <div class="field full">
+            <label class="checkbox"><input type="checkbox" name="auto_renew" {{ 'checked' if server.auto_renew }}>
+              <span>Auto-renew — extend the expiry automatically when payment is due</span></label>
+            <label class="checkbox"><input type="checkbox" name="backup_enabled" {{ 'checked' if server.backup_enabled }}>
+              <span>Nightly backups</span></label>
+            {% if current_user.can('admin') %}
+              <div class="form-grid mt-1">
+                <div class="field"><label for="s-snapshot-limit">Snapshot limit</label>
+                  <input class="input" type="number" id="s-snapshot-limit" name="snapshot_limit" value="{{ server.snapshot_limit }}" min="0" max="100"></div>
+                <div class="field"><label for="s-bandwidth">Bandwidth cap (GB)</label>
+                  <input class="input" type="number" id="s-bandwidth" name="bandwidth_gb" value="{{ server.bandwidth_gb }}" min="0"></div>
+              </div>
+            {% endif %}
+          </div>
+          <div class="field full row"><button class="btn primary" type="submit">{{ icon('save', 15) }} Save settings</button>
+            <span class="tiny muted" id="settings-state">Quota: {{ quota.usage.cpu | round(0) | int }}/{{ quota.quotas.cpu | round(0) | int }} vCPU in use</span></div>
+        </form>
+
+        <div class="divider"></div>
+        <div class="grid cols-2">
+          <div>
+            <h4>{{ icon('cpu', 15) }} Resize</h4>
+            <div class="slider-row"><label for="r-cpu">vCPU</label>
+              <input type="range" id="r-cpu" min="1" max="32" step="1" value="{{ server.cpu_cores | round(0) | int }}"><output id="r-cpu-out">{{ server.cpu_cores | round(0) | int }}</output></div>
+            <div class="slider-row"><label for="r-ram">RAM (GB)</label>
+              <input type="range" id="r-ram" min="512" max="65536" step="512" value="{{ server.ram_mb }}"><output id="r-ram-out">{{ server.ram_mb // 1024 }}</output></div>
+            <div class="slider-row"><label for="r-disk">Disk (GB)</label>
+              <input type="range" id="r-disk" min="5" max="1000" step="5" value="{{ server.disk_gb }}"><output id="r-disk-out">{{ server.disk_gb }}</output></div>
+            <button class="btn ghost mt-1" id="btn-resize">{{ icon('save', 14) }} Apply resize</button>
+          </div>
+          <div>
+            <h4>{{ icon('refresh', 14) }} Reinstall &amp; password</h4>
+            <div class="field"><label for="re-os">Operating system</label>
+              <select class="select" id="re-os">
+                {% for image in images %}<option value="{{ image.id }}" {{ 'selected' if image.id == server.os_image }}>{{ image.label }}</option>{% endfor %}
+              </select></div>
+            <div class="field"><label for="re-password">New root password (optional)</label>
+              <input class="input mono" id="re-password" placeholder="leave blank to auto-generate"></div>
+            <div class="row">
+              <button class="btn danger-ghost" id="btn-reinstall">{{ icon('refresh', 14) }} Reinstall OS</button>
+              <button class="btn ghost" id="btn-rotate">{{ icon('key', 14) }} Rotate root password</button>
+            </div>
+            <div class="divider"></div>
+            <div class="kv">
+              <dt>Root user</dt><dd class="mono">{{ server.root_username }}</dd>
+              <dt>Password</dt>
+              <dd class="mono" id="root-password">
+                <span data-secret="{{ root_password }}">{{ '••••••••••••' if root_password else 'not set' }}</span>
+                {% if root_password %}
+                  <button class="icon-btn ghost" data-copy="{{ root_password }}" data-tip="Copy" type="button">{{ icon('copy', 14) }}</button>
+                  <button class="icon-btn ghost" data-reveal type="button" data-tip="Reveal">{{ icon('eye', 14) }}</button>
+                {% endif %}
+              </dd>
+            </div>
+            <div class="field mt-1"><label>SSH command</label>
+              <div class="input-group"><input class="input mono" id="ssh-command" readonly value="{{ server.ssh_command() }}">
+                <button class="btn ghost" data-copy-from="#ssh-command" type="button">{{ icon('copy', 16) }}</button></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-tab-panel="danger">
+        <div class="grid cols-2">
+          <div class="danger-card">
+            <h4>{{ icon('pause', 16) }} Suspend</h4>
+            <p class="small muted">Force the server offline without deleting data. Usually used for billing holds.</p>
+            <button class="btn danger-ghost" data-power="{{ server.uid }}" data-action="suspend" {{ '' if current_user.can('admin') else 'disabled' }}>
+              {{ icon('pause', 14) }} Suspend server
+            </button>
+          </div>
+          <div class="danger-card">
+            <h4>{{ icon('trash', 16) }} Delete permanently</h4>
+            <p class="small muted">Removes the container, its snapshots and backups. Type <b>{{ server.name }}</b> to confirm.</p>
+            <button class="btn danger" id="btn-delete">{{ icon('trash', 14) }} Delete server</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="stack">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('key', 16) }} Access</h3></div>
+      <div class="card-body">
+        <div class="kv">
+          <dt>Address</dt><dd class="mono">{{ server.primary_ip() }}</dd>
+          <dt>SSH</dt><dd class="mono">root@{{ server.primary_ip() }} -p {{ server.ssh_port }}</dd>
+          <dt>Driver</dt><dd class="mono">{{ backend.label }}</dd>
+          <dt>Capabilities</dt>
+          <dd class="chips">{% for cap in backend.supports %}<span class="chip">{{ cap }}</span>{% endfor %}</dd>
+        </div>
+        <button class="btn ghost block mt-2" data-copy-from="#ssh-command">{{ icon('copy', 14) }} Copy SSH command</button>
+        <a class="btn ghost block mt-1" href="{{ url_for('servers.console_page', uid=server.uid) }}">{{ icon('terminal', 14) }} Open web console</a>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('gauge', 16) }} Health</h3></div>
+      <div class="card-body">
+        <div class="row" style="gap:18px;justify-content:center">
+          <div id="gauge-cpu" class="gauge"></div>
+          <div id="gauge-ram" class="gauge"></div>
+        </div>
+        <div class="kv mt-2">
+          <dt>Last sample</dt><dd class="tiny">{{ stats.sampled_at }}</dd>
+          <dt>Offline?</dt><dd>{{ 'yes' if stats.offline else 'no' }}</dd>
+          <dt>Procs</dt><dd class="mono">{{ stats.procs or 0 }}</dd>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('layers', 16) }} Owner quota</h3></div>
+      <div class="card-body">{{ quota_bars(quota) }}</div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('archive', 16) }} Provision log</h3>
+        <div class="actions"><button class="btn sm quiet" data-copy-from="#provision-log">{{ icon('copy', 13) }}</button></div>
+      </div>
+      <pre class="log" id="provision-log">{{ server.provision_log or 'No provisioning output recorded.' }}</pre>
+    </div>
+  </aside>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script id="server-data" type="application/json">{{ {
+  'uid': server.uid,
+  'name': server.name,
+  'status': server.status,
+  'series': series,
+  'history24': history,
+  'stats': stats,
+  'cpu': server.cpu_cores | round(0) | int,
+  'ram_mb': server.ram_mb,
+  'disk_gb': server.disk_gb,
+  'ws': '/ws/server/' ~ server.uid ~ '/metrics',
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/server.js') }}"></script>
+{% endblock %}

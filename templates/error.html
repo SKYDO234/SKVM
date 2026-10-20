@@ -1,0 +1,24 @@
+{% extends ('base.html' if current_user else '_auth_base.html') %}
+{% from "_icons.html" import icon %}
+{% block title %}{{ title }}{% endblock %}
+{% block art_headline %}{{ code }} · {{ title }}{% endblock %}
+
+{% block content %}
+  <div class="glass card center" style="max-width:640px;margin:6vh auto;padding:44px">
+    <div style="font-size:4rem;font-weight:700;letter-spacing:-.04em" class="gradient-text">{{ code }}</div>
+    <h2 class="mt-1">{{ title }}</h2>
+    <p class="muted">{{ message }}</p>
+    <div class="row" style="justify-content:center;margin-top:12px">
+      <a class="btn primary" href="{{ url_for('dashboard.dashboard_page') if current_user else url_for('auth.login') }}">
+        {{ icon('arrowRight', 16) }} {{ 'Back to dashboard' if current_user else 'Sign in' }}
+      </a>
+      <a class="btn ghost" href="javascript:history.back()">Go back</a>
+    </div>
+  </div>
+{% endblock %}
+
+{% block form %}
+  <h1>{{ code }} · {{ title }}</h1>
+  <p class="sub">{{ message }}</p>
+  <a class="btn primary block lg" href="{{ url_for('auth.login') }}">{{ icon('arrowRight', 16) }} Back to sign in</a>
+{% endblock %}

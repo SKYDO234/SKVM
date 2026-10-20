@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, empty_state %}
+{% block title %}Incidents{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Incidents</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('alert', 22) }} Incidents <span class="badge quiet">{{ incidents | length }} last 50</span></h1>
+    <div class="sub">Status-page incidents. Rendered on <a href="{{ url_for('dashboard.status_page') }}">/status</a> — <span class="mono">investigating → identified → monitoring → resolved</span>.</div>
+  </div>
+  <div class="actions"><button class="btn primary" id="btn-new-inc">{{ icon('plus', 16) }} Open incident</button></div>
+</div>
+
+{% if incidents %}
+<div class="stack mb-3">
+  {% for inc in incidents %}
+    <div class="glass" style="border-left:4px solid {% if inc.severity=='critical' %}var(--crit){% elif inc.severity=='warning' %}var(--warn){% else %}var(--info){% endif %}">
+      <div class="card-head">
+        <h3 style="margin:0">{{ inc.title }}</h3>
+        {{ badge(inc.severity, 'crit' if inc.severity=='critical' else ('warn' if inc.severity=='warning' else 'info')) }}
+        {{ badge(inc.status | default('investigating'), 'good' if inc.status=='resolved' else 'warn') }}
+        <div class="spacer"></div>
+        <span class="tiny dim">open {{ inc.started_at | human_delta if inc.started_at else '' }}{% if inc.resolved_at %} · resolved {{ inc.resolved_at | human_delta }}{% endif %}</span>
+      </div>
+      <div class="card-body"><div class="small" style="white-space:pre-wrap">{{ inc.body }}</div><div class="tiny dim mt-1">ID {{ inc.id }} · {{ inc.started_at | fmt_dt if inc.started_at else '' }}</div></div>
+      <div class="card-foot">
+        <div class="row tight">
+          {% for target in ['investigating','identified','monitoring','resolved'] %}
+            <button class="btn sm {{ 'ghost' if inc.status!=target else 'primary' }}" data-inc-status="{{ inc.id }}" data-status="{{ target }}">{{ target | title }}</button>
+          {% endfor %}
+        </div>
+        <div class="spacer"></div>
+        <button class="btn sm ghost" data-inc-edit="{{ inc.id }}">{{ icon('settings', 13) }} Edit</button>
+        <button class="btn sm danger-ghost" data-inc-delete="{{ inc.id }}">{{ icon('trash', 13) }}</button>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="glass" style="padding:18px">{{ empty_state('All quiet — no incidents', 'Open one when you have degraded performance or an outage. Users see it on the status page.', 'check', '<button class=\"btn primary\" id=\"btn-new-inc-2\">Open an incident</button>') }}</div>
+{% endif %}
+
+<div class="glass">
+  <div class="card-head"><h3>{{ icon('activity', 16) }} Status-page semantics</h3></div>
+  <div class="card-body small muted">
+    Incidents feed into the availability banner and the 14-day heatmap at <a href="{{ url_for('dashboard.status_page') }}">/status</a>. Severity <span class="mono">info/warning/critical</span> controls the dot colour; <span class="mono">resolved</span> stamps <span class="mono">resolved_at</span>.
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>{% endblock %}

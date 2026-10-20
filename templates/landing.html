@@ -1,0 +1,118 @@
+{% from "_icons.html" import icon %}
+<!doctype html>
+<html lang="en" data-theme="midnight">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{{ panel.name }} · {{ panel.tagline }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+</head>
+<body>
+<div class="aurora"></div><div class="grid-overlay"></div><div class="noise"></div>
+
+<div class="landing">
+  <nav class="landing-nav">
+    <span class="brand-mark">{{ icon('bolt', 20) }}</span>
+    <div>
+      <div class="brand-name">{{ panel.name }}</div>
+      <div class="brand-sub">{{ panel.tagline }}</div>
+    </div>
+    <div class="links">
+      <a href="/status">Status</a>
+      <a href="/docs/">Documentation</a>
+      <a href="/healthz">Health</a>
+    </div>
+    <a class="btn primary" href="{{ url_for('auth.login') }}">{{ icon('lock', 16) }} Sign in</a>
+  </nav>
+
+  <section class="landing-hero">
+    <div>
+      <span class="badge accent mb-2">{{ icon('spark', 14) }} SKVM {{ panel.version }} · {{ panel.env }}</span>
+      <h1>The <span class="gradient-text">glass cockpit</span> for your virtual machines.</h1>
+      <p class="lede">
+        Provision containers in seconds, watch live telemetry, open a root shell in the browser, roll back with
+        snapshots and get paged before your users notice — from one self-hosted panel with zero third-party
+        dependencies.
+      </p>
+      <div class="row mt-3">
+        <a class="btn primary lg" href="{{ url_for('auth.login') }}">{{ icon('rocket', 18) }} Open the console</a>
+        <a class="btn ghost lg" href="/docs/">{{ icon('book', 18) }} Read the API docs</a>
+      </div>
+      <div class="row mt-3 small muted">
+        <span>{{ icon('shieldCheck', 15) }} TOTP 2FA</span>
+        <span class="dot-sep"></span>
+        <span>{{ icon('terminal', 15) }} Browser console</span>
+        <span class="dot-sep"></span>
+        <span>{{ icon('pulse', 15) }} Prometheus metrics</span>
+        <span class="dot-sep"></span>
+        <span>{{ icon('key', 15) }} Scoped REST API</span>
+      </div>
+    </div>
+
+    <div class="glass hero-panel">
+      <div class="row between mb-2">
+        <div>
+          <div class="tiny dim">PLATFORM HEALTH</div>
+          <div style="font-size:1.9rem;font-weight:650" class="gradient-text">{{ '%.2f' | format(status.uptime) }}%</div>
+        </div>
+        <span class="badge {{ 'good' if status.nodes_online else 'muted' }}" style="align-self:flex-start">
+          <span class="dot"></span>{{ status.nodes_online }}/{{ status.nodes_total }} hypervisors
+        </span>
+      </div>
+      <div class="kv">
+        <dt>Servers online</dt><dd class="mono">{{ status.servers_running }}/{{ status.servers_total }}</dd>
+        <dt>Active regions</dt><dd>{{ status.regions | join(', ') }}</dd>
+        <dt>Compute backend</dt><dd class="mono">{{ status.backend.active }}</dd>
+        <dt>Generated</dt><dd class="mono">{{ status.generated_at }}</dd>
+      </div>
+      <div class="divider"></div>
+      <div class="mini-list">
+        {% for incident in status.incidents[:3] %}
+          <div class="row-item">
+            <span class="status-dot {{ 'good' if incident.resolved else 'warn' }}"></span>
+            <span class="truncate">{{ incident.title }}</span>
+            <span class="tiny muted" style="margin-left:auto">{{ incident.status }}</span>
+          </div>
+        {% else %}
+          <div class="row-item">
+            <span class="status-dot good"></span><span>All systems operational</span>
+            <span class="tiny muted" style="margin-left:auto">no incidents</span>
+          </div>
+        {% endfor %}
+      </div>
+      <a class="btn ghost block mt-2" href="/status">{{ icon('activity', 16) }} Full status page</a>
+    </div>
+  </section>
+
+  <section class="feature-grid grid cols-3">
+    {% for feature in [
+      ('rocket', 'Provision in seconds', 'Container-based instances with CPU, memory and pids limits, SSH keys injected automatically and a boot log you can read live.'),
+      ('pulse', 'Telemetry that streams', 'WebSocket metric streams for the cockpit plus historical rollups, Prometheus exposition and per-server alert rules.'),
+      ('terminal', 'Root console in the browser', 'A real PTY over WebSocket with resize, copy/paste, an emulated and a live driver, and full audit logging.'),
+      ('folder', 'File manager', 'Browse, edit, upload, chmod, search and share links — implemented over tar streams so it works on any container.'),
+      ('camera', 'Snapshots & backups', 'Instant image-level snapshots with one-click restore, plus filesystem backups with checksums and retention.'),
+      ('shieldCheck', 'Built for operators', 'RBAC (owner/admin/operator/user), quotas, scoped API tokens, audit export, announcements and incident timelines.')
+    ] %}
+      <article class="glass feature-card hover-lift">
+        <div class="ico">{{ icon(feature[0], 20) }}</div>
+        <h3>{{ feature[1] }}</h3>
+        <p class="muted small mb-0">{{ feature[2] }}</p>
+      </article>
+    {% endfor %}
+  </section>
+
+  <footer class="landing-foot">
+    <span>{{ panel.name }} {{ panel.version }}</span>
+    <span class="dot-sep"></span>
+    <span>{{ panel.tagline }}</span>
+    <span class="dot-sep"></span>
+    <a href="{{ 'mailto:' ~ panel.support_email }}">{{ panel.support_email }}</a>
+    <span style="margin-left:auto">Self-hosted · your data never leaves your infrastructure</span>
+  </footer>
+</div>
+<script src="{{ url_for('static', filename='js/skvm.js') }}"></script>
+</body>
+</html>

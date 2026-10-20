@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import banner, quota_bars %}
+{% block title %}New server{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('servers.index') }}">Servers</a><span class="sep">/</span><strong>Create</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('rocket', 22) }} Provision a server</h1>
+    <div class="sub">Four short steps. Instances boot in seconds — you can resize or reinstall later.</div>
+  </div>
+  <div class="actions">
+    <span class="badge {{ 'good' if catalog and catalog | length else 'warn' }}">
+      <span class="dot"></span>{{ backend.label }} driver
+    </span>
+  </div>
+</div>
+
+<form id="create-form" class="wizard" novalidate>
+  <div class="wizard-steps" id="wizard-steps">
+    {% for label, hint, ico in [
+      ('Template', 'Operating system', 'box'),
+      ('Size', 'CPU · RAM · disk', 'cpu'),
+      ('Location', 'Hypervisor & region', 'cloud'),
+      ('Access', 'Keys and credentials', 'key')
+    ] %}
+      <button type="button" class="wizard-step{{ ' active' if loop.first }}" data-step="{{ loop.index0 }}">
+        <span class="num">{{ icon(ico, 15) }}</span>
+        <span class="txt"><b>{{ label }}</b><span class="tiny dim">{{ hint }}</span></span>
+      </button>
+    {% endfor %}
+  </div>
+
+  <div class="wizard-body">
+    <!-- ------------------------------------------------------- step 1 -->
+    <section class="wizard-pane" data-pane="0">
+      <div class="grid cols-2">
+        {% for image in images %}
+          <label class="image-option{{ ' selected' if image.id == defaults.image }}" data-image-option>
+            <input type="radio" name="os_image" value="{{ image.id }}" {{ 'checked' if image.id == defaults.image }}>
+            <span class="img-badge" style="--accent-image: {{ image.accent or '#7c5cff' }}">{{ icon('box', 18) }}</span>
+            <span class="img-text">
+              <b>{{ image.label }}</b>
+              <span class="tiny dim mono">{{ image.docker_image }} · {{ image.family }}</span>
+              <span class="tiny muted">{{ image.blurb | default('Bootstrapped with OpenSSH, sudo and the SKVM agent helpers.') }}</span>
+            </span>
+            {% set meta = (catalog | selectattr('id', 'equalto', image.id) | list | first) %}
+            {% if meta %}<span class="badge quiet tiny">{{ meta.mode }}</span>{% endif %}
+          </label>
+        {% endfor %}
+      </div>
+      <div class="field mt-2">
+        <label for="server_type">Virtualisation</label>
+        <select class="select" name="server_type" id="server_type">
+          <option value="container">Container (fastest, shares the host kernel)</option>
+          <option value="kvm">KVM virtual machine (own kernel, needs a KVM node)</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- step 2 -->
+    <section class="wizard-pane hidden" data-pane="1">
+      <div class="grid cols-5 plan-grid">
+        {% for plan in plans %}
+          <label class="plan-card{{ ' selected' if plan.id == 'starter' }}" data-plan-option>
+            <input type="radio" name="plan" value="{{ plan.id }}" {{ 'checked' if plan.id == 'starter' }}>
+            <div class="pc-name">{{ plan.label }}</div>
+            <div class="pc-price">{{ plan.price }}<small>{{ current_user.currency }}/mo</small></div>
+            <ul class="pc-specs">
+              <li>{{ icon('cpu', 12) }} {{ plan.cpu }} vCPU</li>
+              <li>{{ icon('memory', 12) }} {{ plan.ram_mb / 1024 }} GB RAM</li>
+              <li>{{ icon('disk', 12) }} {{ plan.disk_gb }} GB NVMe</li>
+            </ul>
+            <div class="tiny dim">{{ plan.blurb }}</div>
+          </label>
+        {% endfor %}
+      </div>
+
+      <div class="glass card mt-2">
+        <div class="row between"><h3 style="margin:0">{{ icon('settings', 16) }} Fine-tune resources</h3>
+          <span class="tiny dim">Maximums enforced by your quota: {{ quotas.quotas.cpu | round(0) | int }} vCPU ·
+            {{ (quotas.quotas.ram_mb / 1024) | round(0) | int }} GB RAM · {{ quotas.quotas.disk_gb }} GB disk</span>
+        </div>
+        <div class="slider-row mt-2">
+          <label for="cpu">vCPU</label>
+          <input type="range" id="cpu" name="cpu" min="1" max="{{ quotas.quotas.cpu | round(0) | int }}" step="1" value="{{ defaults.cpu }}">
+          <output id="cpu-out">{{ defaults.cpu }}</output>
+        </div>
+        <div class="slider-row">
+          <label for="ram_mb">Memory (GB)</label>
+          <input type="range" id="ram_mb" name="ram_mb" min="512" max="{{ quotas.quotas.ram_mb }}" step="512" value="{{ defaults.ram_mb }}">
+          <output id="ram-out">{{ defaults.ram_mb // 1024 }}</output>
+        </div>
+        <div class="slider-row">
+          <label for="disk_gb">Disk (GB)</label>
+          <input type="range" id="disk_gb" name="disk_gb" min="5" max="{{ quotas.quotas.disk_gb }}" step="5" value="{{ defaults.disk_gb }}">
+          <output id="disk-out">{{ defaults.disk_gb }}</output>
+        </div>
+        <div class="grid cols-3 mt-2">
+          <div class="field"><label for="swap_mb">Swap (MB)</label>
+            <input class="input" type="number" id="swap_mb" name="swap_mb" value="0" min="0" step="256"></div>
+          <div class="field"><label for="bandwidth_gb">Bandwidth cap (GB)</label>
+            <input class="input" type="number" id="bandwidth_gb" name="bandwidth_gb" value="{{ quotas.quotas.bandwidth_gb }}" min="1"></div>
+          <div class="field"><label for="expires_in_days">Renews in (days)</label>
+            <input class="input" type="number" id="expires_in_days" name="expires_in_days" value="30" min="1" max="3650"></div>
+        </div>
+        <label class="checkbox"><input type="checkbox" name="backup_enabled" value="1" checked>
+          <span>Enable nightly filesystem backups (keeps 7 days)</span></label>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- step 3 -->
+    <section class="wizard-pane hidden" data-pane="2">
+      {% if nodes %}
+        <div class="grid cols-3">
+          <label class="node-option{{ ' selected' if nodes | length == 1 }}" data-node-option>
+            <input type="radio" name="node_id" value="" {{ 'checked' if nodes | length == 1 }}>
+            <div class="row between"><b>Automatic placement</b>{{ icon('spark', 15) }}</div>
+            <div class="tiny muted">SKVM picks the least-loaded healthy hypervisor for this region.</div>
+          </label>
+          {% for node in nodes %}
+            <label class="node-option" data-node-option>
+              <input type="radio" name="node_id" value="{{ node.id }}">
+              <div class="row between"><b>{{ node.name }}</b>
+                <span class="badge {{ 'good' if node.status == 'online' else ('warn' if node.status == 'degraded' else 'muted') }} tiny">
+                  <span class="dot"></span>{{ node.status }}
+                </span>
+              </div>
+              <div class="tiny mono dim truncate">{{ node.endpoint }}</div>
+              <div class="tiny muted mt-1">{{ node.region }} · {{ node.capacity_cpu }} vCPU · {{ (node.capacity_ram_mb / 1024) | round(0) | int }} GB
+                {% if node.overload %}· <span class="warn">overloaded</span>{% endif %}</div>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="banner warn mb-2">{{ icon('alert', 18) }}
+          <div><b>No remote hypervisors registered.</b>
+            <div class="tiny muted">Your server will be created on the local {{ backend.label }} driver. Administrators can
+              register nodes under Admin → Hypervisors and install the agent with
+              <code>python3 skvm-node.py --enroll &lt;token&gt;</code>.</div>
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="field mt-2">
+        <label for="region">Region label (shown to end users)</label>
+        <select class="select" id="region" name="region">
+          {% for region in regions %}<option value="{{ region.id }}">{{ region.flag }} {{ region.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="grid cols-2">
+        <div class="field"><label for="name">Server name</label>
+          <input class="input" id="name" name="name" required placeholder="web-prod-01" maxlength="48">
+          <div class="hint">Letters, numbers, dashes. Also used as the container name.</div></div>
+        <div class="field"><label for="hostname">Hostname</label>
+          <input class="input" id="hostname" name="hostname" placeholder="web-prod-01.example.com">
+          <div class="hint">Optional. Defaults to the server name.</div></div>
+      </div>
+      <div class="field"><label for="tags">Tags</label>
+        <input class="input" id="tags" name="tags" placeholder="production, web, eu-central">
+        <div class="hint">Comma separated — used by the command palette and filters.</div></div>
+    </section>
+
+    <!-- ------------------------------------------------------- step 4 -->
+    <section class="wizard-pane hidden" data-pane="3">
+      <div class="grid cols-2">
+        <div class="glass card">
+          <h3>{{ icon('key', 16) }} SSH keys</h3>
+          {% if ssh_keys %}
+            <div class="key-list">
+              {% for key in ssh_keys %}
+                <label class="checkbox"><input type="checkbox" name="ssh_keys" value="{{ key.id }}" {{ 'checked' if loop.first }}>
+                  <span><b>{{ key.name }}</b><span class="tiny mono dim block truncate">{{ key.fingerprint }}</span></span></label>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="muted small">No keys on file yet.</p>
+          {% endif %}
+          <div class="field mt-2"><label for="public_key">Add a public key</label>
+            <textarea class="input mono" id="public_key" name="public_key" rows="3" placeholder="ssh-ed25519 AAAA… ada@laptop"></textarea></div>
+          <a class="btn sm ghost" href="{{ url_for('account.index') }}#keys">{{ icon('plus', 14) }} Manage keys in your account</a>
+        </div>
+
+        <div class="glass card">
+          <h3>{{ icon('lock', 16) }} Root credentials</h3>
+          <div class="field"><label for="root_password">Root password</label>
+            <div class="input-group">
+              <input class="input mono" id="root_password" name="root_password" placeholder="leave blank to auto-generate">
+              <button class="btn ghost" type="button" id="gen-password" data-tip="Generate">{{ icon('refresh', 16) }}</button>
+            </div>
+            <div class="hint">Either the password or an SSH key is required. Stored encrypted (Fernet) in the database.</div></div>
+          <div class="field"><label for="notes">Notes for this server</label>
+            <textarea class="input" id="notes" name="notes" rows="3" placeholder="What runs here, who owns it, on-call rota…"></textarea></div>
+          <label class="checkbox"><input type="checkbox" name="start_after_create" value="1" checked>
+            <span>Start the instance immediately after provisioning</span></label>
+        </div>
+      </div>
+
+      <div class="glass card mt-2">
+        <h3>{{ icon('chart', 16) }} Review</h3>
+        <div class="review-grid" id="review-grid"></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="wizard-foot glass">
+    <button type="button" class="btn ghost" id="wizard-prev" disabled>{{ icon('arrowLeft', 16) }} Back</button>
+    <div class="spacer"></div>
+    <div class="estimate">
+      <span class="tiny dim">Estimated monthly price</span>
+      <b id="estimate-price">{{ estimate(defaults.cpu, defaults.ram_mb, defaults.disk_gb) }} {{ current_user.currency }}</b>
+    </div>
+    <button type="button" class="btn primary" id="wizard-next">Continue {{ icon('arrowRight', 16) }}</button>
+    <button type="submit" class="btn primary hidden" id="wizard-create">{{ icon('rocket', 16) }} Create server</button>
+  </div>
+</form>
+
+<section class="grid cols-2 mt-3">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('layers', 16) }} Quota headroom</h3></div>
+    <div class="card-body">{{ quota_bars(quotas) }}</div>
+  </div>
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('info', 16) }} What happens next</h3></div>
+    <div class="card-body">
+      <ol class="steps-list">
+        <li>The driver pulls <span class="mono" id="next-image">ubuntu:24.04</span> and starts the container with hard CPU, memory, pids and disk limits.</li>
+        <li>First boot runs the bootstrap script: OpenSSH, sudo, your keys, the generated root password.</li>
+        <li>You get the address, console and metrics — plus an audit entry and an e-mail if notifications are on.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% set base_map = {} %}
+{% for image in images %}{% set _ = base_map.update({image.id: image.docker_image}) %}{% endfor %}
+<script id="create-data" type="application/json">{{ {
+  'images': images | map(attribute='id') | list,
+  'base': base_map,
+  'plans': plans | map(attribute='id') | list,
+  'nodes': nodes | length,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/create.js') }}"></script>
+{% endblock %}

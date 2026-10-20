@@ -1,0 +1,11 @@
+{% extends "_auth_base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}Scheduled maintenance{% endblock %}
+{% block art_headline %}We are upgrading the control plane.{% endblock %}
+
+{% block form %}
+  <h1>Scheduled maintenance</h1>
+  <p class="sub">{{ settings_values.get('maintenance_message') or 'SKVM is undergoing maintenance. Panels will return shortly.' }}</p>
+  <div class="banner warn">{{ icon('alert', 18) }}<div>Compute workloads keep running — only the panel is paused.</div></div>
+  <a class="btn primary block lg mt-3" href="{{ url_for('auth.login') }}">{{ icon('lock', 16) }} Staff sign in</a>
+{% endblock %}

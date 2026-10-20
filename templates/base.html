@@ -1,0 +1,103 @@
+{% from "_icons.html" import icon %}
+<!doctype html>
+<html lang="en" data-theme="{{ (current_user.theme if current_user else 'midnight') }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#070b16">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="panel-version" content="{{ panel.version }}">
+  <title>{% block title %}{{ app_title | default('Dashboard') }}{% endblock %} · {{ panel.name }}</title>
+  <link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+<div class="grid-overlay" aria-hidden="true"></div>
+<div class="noise" aria-hidden="true"></div>
+
+{% set page_title = self.title() | striptags | trim or panel.name %}
+<div class="app">
+  {% include "_rail.html" %}
+  <div class="shell">
+    {% include "_topbar.html" %}
+    <main class="content" id="main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="stack mb-2" style="margin-bottom:18px">
+            {% for category, message in messages %}
+              <div class="banner {{ 'crit' if category == 'error' else ('warn' if category == 'warning' else ('good' if category == 'success' else 'info')) }}">
+                {{ icon('alert' if category == 'error' else ('check' if category == 'success' else 'info'), 18) }}
+                <div>{{ message }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+    <footer class="content" style="padding-top:0;padding-bottom:34px">
+      <div class="row between tiny dim">
+        <span>{{ panel.name }} v{{ panel.version }} · {{ panel.tagline }}</span>
+        <span class="row tight">
+          <a href="/status">Status</a><span class="dot-sep"></span>
+          <a href="/docs/">API docs</a><span class="dot-sep"></span>
+          <a href="/healthz">Health</a>
+        </span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<div class="toasts" role="status" aria-live="polite"></div>
+
+{% block modals %}{% endblock %}
+
+<script src="{{ url_for('static', filename='js/skvm.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+  SKVM.ready(function () {
+    SKVM.commandPalette([
+      { label: "Dashboard", url: "/dashboard", icon: "grid", group: "Navigate", keywords: "home overview" },
+      { label: "Servers", url: "/servers", icon: "server", group: "Navigate", keywords: "vps fleet list" },
+      { label: "Create server", url: "/servers/new", icon: "plus", group: "Navigate", keywords: "provision deploy new vps" },
+      { label: "Alerts", url: "/alerts", icon: "bell", group: "Navigate", keywords: "rules notifications" },
+      { label: "Account", url: "/account", icon: "user", group: "Account", keywords: "profile api tokens ssh keys" },
+      { label: "Security", url: "/account#security", icon: "shield", group: "Account", keywords: "2fa sessions password" },
+      { label: "API tokens", url: "/account#tokens", icon: "key", group: "Account", keywords: "token bearer" },
+      { label: "API documentation", url: "/docs/", icon: "book", group: "Account", keywords: "rest curl" },
+      { label: "Status page", url: "/status", icon: "activity", group: "Navigate", keywords: "uptime health" },
+      {% if current_user and current_user.can('admin') %}
+      { label: "Admin overview", url: "/admin/", icon: "layers", group: "Admin", keywords: "staff control" },
+      { label: "Users", url: "/admin/users", icon: "users", group: "Admin", keywords: "accounts quotas" },
+      { label: "All servers", url: "/admin/servers", icon: "server", group: "Admin", keywords: "fleet" },
+      { label: "Hypervisor nodes", url: "/admin/nodes", icon: "cloud", group: "Admin", keywords: "agent hypervisor register" },
+      { label: "Panel settings", url: "/admin/settings", icon: "settings", group: "Admin", keywords: "config toggles" },
+      { label: "Audit log", url: "/admin/audit", icon: "history", group: "Admin", keywords: "compliance events" },
+      { label: "Announcements", url: "/admin/announcements", icon: "bell", group: "Admin", keywords: "notice" },
+      { label: "Incidents", url: "/admin/incidents", icon: "alert", group: "Admin", keywords: "status page" },
+      {% endif %}
+      {% for server in palette_servers | default([]) %}
+      { label: "{{ server.name }}", url: "/servers/{{ server.uid }}", icon: "server", group: "Servers", keywords: "{{ server.uid }} {{ server.ip_address }} {{ server.os_image }}" },
+      {% endfor %}
+      { label: "Toggle theme", action: function () {
+          var next = document.documentElement.dataset.theme === "daylight" ? "midnight" : "daylight";
+          document.documentElement.dataset.theme = next;
+          SKVM.toast("Theme: " + next, "info");
+        }, icon: "eye", group: "Actions", hint: "⌘K" },
+      { label: "Copy SSH command for this page", action: function () {
+          var node = document.querySelector("[data-ssh]");
+          SKVM.copy(node ? node.dataset.ssh : "no server context on this page", "SSH command");
+        }, icon: "copy", group: "Actions" },
+      { label: "Sign out", url: "/logout", icon: "logout", group: "Account" }
+    ]);
+    document.querySelector("[data-open-palette]")?.addEventListener("click", SKVM.openPalette);
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
