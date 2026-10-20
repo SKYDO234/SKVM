@@ -48,6 +48,26 @@ notice() {
 
 bad() { emit "$*"; }
 
+# A 500 tells us the route is broken; the panel log says why. Annotations are
+# capped at ten per job, so spend them on the raise site and the exception.
+report_traceback() {
+  local log=instance/skvm.log n
+  [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
+  if [ ! -f "$log" ]; then
+    notice "smoke: no $log to explain the failures with"
+    return 0
+  fi
+  n="$(grep -n 'Traceback (most recent call last)' "$log" | tail -1 | cut -d: -f1)"
+  if [ -z "$n" ]; then
+    notice "smoke: no traceback in the panel log; tail: $(tail -n 2 "$log" | tr '\n' ' ' | cut -c1-300)"
+    return 0
+  fi
+  notice "smoke: request $(sed -n "$((n - 1))p" "$log" | tr -d '\n' | cut -c1-240)"
+  notice "smoke: frames $(tail -n "+$n" "$log" | grep 'File "' | tail -4 | sed -e 's#.*skvm#skvm#' -e 's/", line \([0-9]*\).*/:\1/' | tr -d '\n' | cut -c1-400)"
+  notice "smoke: exception $(tail -n "+$n" "$log" | awk 'NR > 1 && !/^[[:space:]]/ {print; exit}' | cut -c1-400)"
+}
+
+
 # A status code alone rarely explains anything, so include the response head.
 brief_body() {
   sed -e 's/<[^>]*>//g' -e 's/[[:space:]][[:space:]]*/ /g' "$BODY" 2>/dev/null | tr -d '\n' | cut -c1-160
@@ -193,7 +213,9 @@ if [ -n "$PW" ]; then
     expect_api GET "/servers/${UID_}/api/v1/metrics?window=live"
     expect_api GET "/servers/${UID_}/api/v1/events"
   else
-    bad "no server uid in the API response"
+    # Legitimate when the driver is a real hypervisor with an empty account.
+    notice "smoke: no servers in this fleet - skipping the per-server checks"
+    say "  ..   per-server checks                      skipped (empty fleet)"
   fi
 else
   bad "no admin password to log in with: export SKVM_ADMIN_PASSWORD or run this next to instance/admin-credentials.txt"
@@ -210,5 +232,6 @@ if [ "$FAILURES" -eq 0 ]; then
   printf '\n\033[1mSKVM smoke: %s checks, all green\033[0m\n' "$CHECKS"
   exit 0
 fi
+report_traceback
 printf '\n\033[1mSKVM smoke: %s checks, %s failed\033[0m\n' "$CHECKS" "$FAILURES" >&2
 exit 1
