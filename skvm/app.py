@@ -9,7 +9,8 @@ import sys
 from datetime import timedelta
 from typing import Any
 
-from flask import Flask, Response, current_app, g, jsonify, redirect, render_template, request, url_for
+from flask import (Flask, Response, current_app, g, has_request_context, jsonify, redirect,
+                   render_template, request, url_for)
 from werkzeug.exceptions import HTTPException
 
 from . import __version__
@@ -277,6 +278,9 @@ def _register_template_helpers(app: Flask) -> None:
 
     @app.context_processor
     def _inject():
+        if not has_request_context():
+            # E-mails rendered from the worker run in an app context only.
+            return {}
         user = current_user()
         palette_servers = []
         nav_alerts = 0
