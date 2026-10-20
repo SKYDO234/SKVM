@@ -49,10 +49,19 @@ def parse_dt(raw: Any) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
-def human_delta(value: datetime | None) -> str:
-    """``"3h 12m"`` style relative rendering used by the front-end."""
+def human_delta(value: datetime | str | None) -> str:
+    """``"3h 12m"`` style relative rendering used by the front-end.
+
+    Templates sometimes hold what ``public()`` serialised - an already formatted
+    string - rather than a datetime. Saying that back is better than a 500 on an
+    admin page, so non-datetime input is passed through instead of raising.
+    """
     if value is None:
         return "never"
+    if isinstance(value, str):
+        return value or "never"
+    if not isinstance(value, datetime):
+        return "unknown"
     if value.tzinfo is None:
         value = value.replace(tzinfo=UTC)
     delta = utcnow() - value

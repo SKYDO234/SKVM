@@ -54,6 +54,36 @@ def _rate(uid: str, key: str, value: float | None, what: str) -> float:
     return round(delta / elapsed / 1024, 2)  # KB/s
 
 
+def _unreachable_row(server: Server, error: str = "") -> dict[str, Any]:
+    """A stats row for a server the driver would not talk about.
+
+    Every key the dashboards read has to be present: a missing ``disk_pct`` used to
+    turn one unreachable container into a 500 on the server page.
+    """
+    uid = server.uid
+    previous = _LAST.get(uid) or {}
+    stored = server.last_metrics or {}
+    row: dict[str, Any] = {
+        "cpu_pct": 0.0,
+        "ram_used_mb": 0.0,
+        "ram_total_mb": float(server.ram_mb),
+        "ram_pct": 0.0,
+        "disk_used_gb": float(stored.get("disk_used_gb") or previous.get("disk_used_gb") or 0),
+        "disk_total_gb": float(server.disk_gb),
+        "disk_pct": None,
+        "net_rx_kbps": 0.0,
+        "net_tx_kbps": 0.0,
+        "load1": 0.0,
+        "procs": 0,
+        "status": server.status,
+        "sampled_at": iso(utcnow()),
+        "offline": True,
+    }
+    if error:
+        row["error"] = error
+    return row
+
+
 def collect(server: Server, cache_seconds: float = 2.0) -> dict[str, Any]:
     """Return live stats for one server (cached for a couple of seconds)."""
     uid = server.uid
@@ -65,22 +95,7 @@ def collect(server: Server, cache_seconds: float = 2.0) -> dict[str, Any]:
         return cached
 
     if server.status != ServerStatus.RUNNING.value:
-        stats: dict[str, Any] = {
-            "cpu_pct": 0.0,
-            "ram_used_mb": 0.0,
-            "ram_total_mb": float(server.ram_mb),
-            "ram_pct": 0.0,
-            "disk_used_gb": float(server.last_metrics.get("disk_used_gb") or 0),
-            "disk_total_gb": float(server.disk_gb),
-            "disk_pct": None,
-            "net_rx_kbps": 0.0,
-            "net_tx_kbps": 0.0,
-            "load1": 0.0,
-            "procs": 0,
-            "status": server.status,
-            "sampled_at": iso(utcnow()),
-            "offline": True,
-        }
+        stats = _unreachable_row(server)
         _remember(uid, stats)
         return stats
 
@@ -89,18 +104,14 @@ def collect(server: Server, cache_seconds: float = 2.0) -> dict[str, Any]:
         raw = backend.stats(server.container_id)
     except BackendError as exc:
         log.debug("stats failed for %s: %s", uid, exc)
-        stats = {
-            **(_LAST.get(uid) or {}),
-            "status": server.status,
-            "error": str(exc)[:160],
-            "sampled_at": iso(utcnow()),
-            "offline": True,
-        }
+        # Same complete shape as the offline row: templates read these keys
+        # unguarded, so a driver that cannot answer must not blank them out.
+        stats = _unreachable_row(server, error=str(exc)[:160])
         _remember(uid, stats)
         return stats
     except Exception as exc:  # pragma: no cover - driver specific
         log.warning("unexpected stats error for %s: %s", uid, exc)
-        return {"status": server.status, "error": str(exc)[:160], "sampled_at": iso(utcnow()), "offline": True}
+        return _unreachable_row(server, error=str(exc)[:160])
 
     rx_kbps = raw.get("net_rx_kbps")
     tx_kbps = raw.get("net_tx_kbps")

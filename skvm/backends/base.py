@@ -191,6 +191,47 @@ class Backend(abc.ABC):
             raise BackendError(f"{action} failed: {exc}", detail=str(exc)) from exc
 
 
+class UnavailableBackend(Backend):
+    """Stand-in driver for a server whose real driver cannot be talked to.
+
+    A node row can outlive its agent secret, point at a socket that stopped
+    existing, or be registered by a bootstrap on a host where the hypervisor is
+    simply absent.  Rendering a page must never fail because of that, so routes
+    get this object instead of an exception: the panel still draws the server, and
+    every action comes back as a 502 that names the reason.
+    """
+
+    name = "unavailable"
+    label = "Driver unavailable"
+    supports: set[str] = set()
+
+    def __init__(self, reason: str = "") -> None:
+        self.reason = reason or "no driver is reachable for this server"
+
+    @classmethod
+    def available(cls) -> tuple[bool, str]:
+        return False, "no reachable driver"
+
+    def _refuse(self, *args: Any, **kwargs: Any):
+        raise BackendError(self.reason, code="backend_unavailable", detail=self.reason)
+
+    create = _refuse
+    start = _refuse
+    stop = _refuse
+    restart = _refuse
+    remove = _refuse
+    inspect = _refuse
+    stats = _refuse
+    logs = _refuse
+    exec_command = _refuse
+
+    def ping(self) -> tuple[bool, str]:
+        return False, self.reason
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<UnavailableBackend {self.reason!r}>"
+
+
 def demo_backend_default() -> bool:
     """True when SKVM should fall back to the demo driver (no Docker daemon)."""
     from flask import current_app
