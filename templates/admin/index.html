@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import kpi, quota_bars, badge, meter, empty_state, timeline %}
+{% block title %}Admin · Overview{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Admin overview</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('layers', 22) }} Admin overview
+      <span class="badge {{ 'good' if backend.docker else 'warn' }}"><span class="dot"></span>{{ backend.active }} · {{ 'docker connected' if backend.docker else backend.docker_detail }}</span>
+    </h1>
+    <div class="sub">{{ users | length }} users · {{ nodes | length }} hypervisors · {{ servers | length }} servers · storage {{ storage_mb }} MB backups on panel host</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-sync">{{ icon('refresh', 16) }} Sync fleet</button>
+    <button class="btn ghost" id="btn-prune">{{ icon('trash', 16) }} Prune</button>
+    <a class="btn ghost" href="{{ url_for('admin.audit_page') }}">{{ icon('history', 16) }} Audit</a>
+    <a class="btn primary" href="{{ url_for('admin.users') }}">{{ icon('users', 16) }} Users</a>
+  </div>
+</div>
+
+{% set t = totals or {} %}
+<section class="grid cols-4 mb-2">
+  {{ kpi('Fleet size', t.servers | default(servers | length), '', 'server', 'a', sub=(t.running | default(0) ~ ' running · ' ~ (t.stopped|default(0)) ~ ' stopped')) }}
+  {{ kpi('vCPU committed', t.cpu_cores | default(0) | round(1), 'cores', 'cpu', 'b', sub='avg ' ~ ((t.cpu_cores|default(0))/ ((t.servers|default(1)) or 1) | round(1)) ~ ' per server') }}
+  {{ kpi('Memory committed', (t.ram_mb|default(0)/1024) | round(1), 'GB', 'memory', 'c', sub=(t.disk_gb|default(0) ~ ' GB disk attached')) }}
+  {{ kpi('Monthly run-rate', (t.monthly_cost|default(0)) | round(2), current_user.currency, 'tag', 'd', sub=t.error | default(0) ~ ' in error · ' ~ t.suspended | default(0) ~ ' suspended') }}
+</section>
+
+{% if not backend.docker and backend.configured != 'demo' %}
+  <div class="banner warn mb-2">{{ icon('alert', 18) }} <div><b>Docker daemon is unreachable.</b><div class="tiny muted">Panel runs the simulated driver ({{ backend.docker_detail }}). Registrations still succeed and are persisted; real container scheduling resumes when docker reconnects.</div></div></div>
+{% endif %}
+
+<section class="detail-grid mb-2">
+  <div class="stack">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('cloud', 16) }} Hypervisor capacity</h3><span class="badge quiet">{{ nodes | length }} registered · {{ nodes | selectattr('status','equalto','online') | list | length }} online</span></div>
+      <div class="card-body">
+        <div class="kv mb-2">
+          <dt>Drivers available</dt><dd class="tiny mono">{{ backends | join(', ') }}</dd>
+          <dt>Active driver</dt><dd class="mono">{{ backend.active }}</dd>
+          <dt>Panel host</dt><dd class="mono tiny">{{ host.hostname if host else '—' }} · {{ host.memory_mb if host else 0 }} MB · {{ host.cpus if host else 0 }} CPUs</dd>
+        </div>
+        {% if nodes %}
+          <div class="table-wrap">
+            <table class="data compact">
+              <thead><tr><th>Node</th><th>Region</th><th>State</th><th>Load</th><th></th></tr></thead>
+              <tbody>
+                {% for node in nodes %}
+                  <tr>
+                    <td><b>{{ node.name }}</b><div class="tiny dim mono">{{ node.endpoint }}</div></td>
+                    <td class="tiny">{{ node.region }}</td>
+                    <td>{{ badge(node.status, 'good' if node.status=='online' else ('warn' if node.status=='degraded' else 'muted'), node.status=='online') }}</td>
+                    <td class="tiny mono">{{ node.overload | round(2) }} · p{{ node.priority }}</td>
+                    <td><a class="btn sm quiet" href="{{ url_for('admin.nodes') }}">{{ icon('arrowRight', 12) }}</a></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="banner info">{{ icon('info', 18) }} <div>No remote nodes yet — fleet runs locally. Add one under <a href="{{ url_for('admin.nodes') }}">Admin → Hypervisors</a>.</div></div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="glass flush">
+      <div class="card-head"><h3>{{ icon('activity', 16) }} Worker</h3><span class="live-pill"><span class="pulse"></span> sampling every 10 s</span></div>
+      <div class="card-body">
+        <div class="kv">
+          <dt>Tasks ticked</dt><dd class="mono tiny">{{ worker_stats | default({}, true) | tojson }}</dd>
+        </div>
+        <div class="code-block" style="margin-top:10px;max-height:160px;overflow:auto" id="worker-stats">{{ worker_stats | tojson(indent=2) if worker_stats else '{}' }}</div>
+        <div class="row mt-1"><button class="btn sm ghost" id="btn-worker-stats">{{ icon('refresh', 13) }} Refresh worker stats</button><span class="tiny dim" id="worker-state"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('history', 16) }} Recent audit (7 d)</h3><span class="badge quiet">{{ audit_stats.total | default(0) }} events · {{ audit_stats.failures | default(0) }} failures</span></div>
+      <div class="card-body">
+        {% if audit_stats.top_actions %}
+          <div class="chips" style="margin-bottom:10px">
+            {% for entry in audit_stats.top_actions[:6] %}<span class="tag">{{ entry.action }} · {{ entry.count }}</span>{% endfor %}
+          </div>
+        {% endif %}
+        {% if recent_audit %}
+          <div class="timeline">
+            {% for row in recent_audit[:12] %}
+              <div class="event {{ row.result }}">
+                <div class="tiny"><b>{{ row.action }}</b> <span class="dim">· {{ row.target_label or row.target_id }}</span></div>
+                <div class="when">{{ row.actor }} · {{ row.ts | human_delta }} · {{ row.channel }}</div>
+              </div>
+            {% endfor %}
+          </div>
+          <a class="btn sm ghost block mt-2" href="{{ url_for('admin.audit_page') }}">Open full audit log</a>
+        {% else %}
+          <div class="tiny muted">No audit records in this window.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('bell', 16) }} Open alerts feed</h3><a class="btn sm quiet" href="{{ url_for('alerts.index') }}">Manage</a></div>
+      {% if alerts %}
+        <div class="mini-list" style="padding:0 16px 12px">
+          {% for ev in alerts %}
+            <div class="row-item">
+              <span class="status-dot {{ 'critical' if ev.severity=='critical' else 'warn' }}"></span>
+              <div class="truncate"><b class="tiny">{{ ev.message or ev.rule.name if ev.rule is defined else '—' }}</b><div class="tiny dim">{{ ev.rule.name if ev.rule else '' }} · {{ ev.ts | human_delta }}</div></div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="card-body small muted row">{{ icon('check', 16) }} Quiet — no unacknowledged alert events.</div>
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+<section class="glass flush">
+  <div class="card-head"><h3>{{ icon('server', 16) }} Fleet at a glance (staff view)</h3>
+    <div class="actions"><span class="badge quiet">{{ servers | length }} total</span><a class="btn sm ghost" href="{{ url_for('admin.servers') }}">All servers</a></div>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Server</th><th>Owner</th><th>State</th><th>Resources</th><th>Address</th><th>Cost</th><th></th></tr></thead>
+      <tbody>
+        {% for server in servers[:12] %}
+          {% set meta = server.status | status_meta %}
+          <tr>
+            <td><a href="{{ url_for('admin.servers') }}" class="mono tiny truncate" style="color:var(--ink-0);font-weight:600">{{ server.name }}</a><div class="tiny dim mono">{{ server.uid }}</div></td>
+            <td class="tiny">{{ server.owner.username if server.owner else '—' }}</td>
+            <td>{{ badge(meta.label, meta.tone) }}</td>
+            <td class="mono tiny">{{ server.cpu_cores | round(0) | int }}c · {{ (server.ram_mb/1024)|round(1) }}G · {{ server.disk_gb }}G</td>
+            <td class="mono tiny">{{ server.primary_ip() }}</td>
+            <td class="mono tiny">{{ server.monthly_price | round(2) }} {{ server.currency }}</td>
+            <td><a class="btn sm quiet" href="{{ url_for('servers.detail', uid=server.uid) }}">{{ icon('arrowRight', 13) }}</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7" class="muted small center">No servers yet — seed demo data or create one from <a href="{{ url_for('servers.new') }}">Create server</a>.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>
+{% endblock %}

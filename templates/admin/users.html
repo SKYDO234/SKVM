@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import quota_bars, badge, empty_state, meter %}
+{% block title %}Users{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Users</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('users', 22) }} Users <span class="badge accent">{{ users | length }} accounts</span></h1>
+    <div class="sub">Create, approve, quota and suspend — owners cannot be removed by admins.</div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btn-create-user">{{ icon('plus', 16) }} Create user</button>
+    <a class="btn ghost" href="{{ url_for('admin.audit_page') }}?action=user">{{ icon('history', 16) }} User actions</a>
+  </div>
+</div>
+
+<div class="glass flush mb-2">
+  <form class="table-toolbar" method="get" action="{{ url_for('admin.users') }}">
+    <div class="row tight grow" style="flex:1">
+      <div class="input-group" style="max-width:340px"><input class="input" name="q" value="{{ filters.q }}" placeholder="Search username, e-mail, display name…"><button class="btn ghost" type="submit">{{ icon('search', 16) }}</button></div>
+      <select class="select" name="role" style="max-width:180px">
+        <option value="">All roles</option>
+        {% for r in roles %}<option value="{{ r }}" {{ 'selected' if filters.role==r }}>{{ r | title }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="tiny dim">{{ quotas.rows[0].used | default(0) | round(0) | int }}/{{ quotas.quotas.servers | default(0) | round(0) | int }} server slots in use</div>
+  </form>
+</div>
+
+<section class="glass flush">
+  {% if users %}
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>User</th><th>Contact</th><th>Role</th><th>Status</th><th>Servers</th><th>Quota CPU/RAM</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+          {% for user in users %}
+            {% set count = server_counts.get(user.username, 0) %}
+            <tr data-user="{{ user.id }}">
+              <td>
+                <div class="row tight"><span class="avatar" style="width:28px;height:28px;font-size:11px">{{ user.initials }}</span>
+                <div><b style="color:var(--ink-0)">{{ user.username }}</b><div class="tiny dim">{{ user.full_name or '—' }}{% if user.company %} · {{ user.company }}{% endif %}</div></div></div>
+              </td>
+              <td class="tiny mono">{{ user.email }}<div class="tiny dim">{{ user.last_login_ip or '—' }} · {{ user.last_login_at | human_delta if user.last_login_at else 'never' }}</div></td>
+              <td>{{ badge(user.role | title, 'accent' if user.role in ['owner','admin'] else ('muted' if user.role=='user' else 'info')) }}</td>
+              <td>
+                {{ badge('Active' if user.is_active else 'Disabled', 'good' if user.is_active else 'crit') }}
+                {% if not user.is_verified %}<span class="badge warn tiny">unverified</span>{% endif %}
+                {% if user.must_change_password %}<span class="badge warn tiny">must reset</span>{% endif %}
+                {% if user.totp_enabled %}<span class="tag tiny">{{ icon('shieldCheck', 11) }} 2FA</span>{% endif %}
+              </td>
+              <td class="mono tiny"><a href="{{ url_for('admin.servers') }}?owner={{ user.id }}">{{ count }} servers</a></td>
+              <td class="tiny mono">{{ (user.quotas.cpu if user.quotas else default_quotas.cpu) | default(0) | round(0) | int }}c · {{ ((user.quotas.ram_mb if user.quotas and user.quotas.ram_mb else default_quotas.ram_mb) / 1024) | round(1) }}G</td>
+              <td class="tiny">{{ user.created_at | fmt_dt }}<div class="tiny dim">{{ user.created_at | human_delta }}</div></td>
+              <td>
+                <div class="dropdown">
+                  <button class="icon-btn ghost sm" data-dropdown>{{ icon('dots', 16) }}</button>
+                  <div class="dropdown-menu">
+                    <button data-user-edit="{{ user.id }}">{{ icon('settings', 15) }} Edit & quotas</button>
+                    <button data-user-password="{{ user.id }}">{{ icon('key', 15) }} Reset password</button>
+                    <button data-user-sessions="{{ user.id }}">{{ icon('clock', 15) }} Revoke sessions</button>
+                    <hr>
+                    <button data-user-toggle-active="{{ user.id }}">{{ icon('shieldOff' if user.is_active else 'shieldCheck', 15) }} {{ 'Disable' if user.is_active else 'Enable' }}</button>
+                    <button data-user-delete="{{ user.id }}" style="color:var(--crit)">{{ icon('trash', 15) }} Delete account</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div style="padding:18px">{{ empty_state('No users match', 'Try a broader search or create a new account.', 'search') }}</div>
+  {% endif %}
+  <div class="card-foot tiny dim">Owner protection: the last owner cannot be deleted or demoted. All destructive actions are audit-logged.</div>
+</section>
+
+<div class="grid cols-2 mt-2">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('layers', 16) }} Default quotas (new users inherit these)</h3></div>
+    <div class="card-body">{{ quota_bars(quotas) }}</div>
+  </div>
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('shield', 16) }} Policy</h3></div>
+    <div class="card-body kv">
+      <dt>New account default role</dt><dd>user (operators can promote)</dd>
+      <dt>Password on create</dt><dd class="mono tiny">random 10-char · must-change flag · optional welcome e-mail</dd>
+      <dt>Lockout</dt><dd>{{ config.get('LOGIN_MAX_ATTEMPTS',8) }} failures → {{ (config.get('LOGIN_LOCKOUT_SECONDS',900)/60)|round(0)|int }} min lockout</dd>
+      <dt>Enforce 2FA for staff</dt><dd>{{ 'yes' if settings_values.require_2fa_for_staff else 'no' }} (Admin → Panel settings)</dd>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script id="users-data" type="application/json">{{ {
+  'roles': roles,
+  'defaultQuotas': default_quotas,
+  'filters': filters,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>
+{% endblock %}

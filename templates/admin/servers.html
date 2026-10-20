@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, empty_state, meter %}
+{% block title %}All servers — Admin{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Fleet</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('server', 22) }} Fleet <span class="badge accent">{{ servers | length }} instances</span></h1>
+    <div class="sub">Cross-tenant view. Suspend for billing, reassign owners, force-resync with the hypervisor.</div>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('admin.users') }}">{{ icon('users', 16) }} Users</a>
+    <a class="btn ghost" href="{{ url_for('servers.new') }}">{{ icon('plus', 16) }} Create</a>
+  </div>
+</div>
+
+<section class="grid cols-4 mb-2">
+  {% set t = totals or {} %}
+  <div class="glass kpi accent-a"><div class="top">{{ icon('play', 14) }} <span>Running</span></div><div class="value">{{ t.running | default(0) }}</div><div class="tiny muted">{{ t.stopped | default(0) }} stopped · {{ t.suspended | default(0) }} suspended</div></div>
+  <div class="glass kpi accent-b"><div class="top">{{ icon('cpu', 14) }} <span>vCPU</span></div><div class="value">{{ t.cpu_cores | default(0) | round(1) }}</div><div class="tiny muted">across fleet</div></div>
+  <div class="glass kpi accent-c"><div class="top">{{ icon('memory', 14) }} <span>Memory</span></div><div class="value">{{ (t.ram_mb|default(0)/1024) | round(1) }}<small>GB</small></div><div class="tiny muted">{{ t.disk_gb | default(0) }} GB disk</div></div>
+  <div class="glass kpi accent-d"><div class="top">{{ icon('tag', 14) }} <span>Errors</span></div><div class="value" style="color:var(--crit)">{{ t.error | default(0) }}</div><div class="tiny muted">{{ t.provisioning | default(0) }} provisioning</div></div>
+</section>
+
+<div class="glass flush mb-2">
+  <form class="table-toolbar" method="get">
+    <div class="row tight grow" style="flex:1">
+      <input class="input" name="q" value="{{ filters.q }}" placeholder="Search name, UID, IP…" style="max-width:280px">
+      <select class="select" name="status" style="max-width:160px">
+        <option value="">All states</option>
+        {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if filters.status==s }}>{{ s | title }}</option>{% endfor %}
+      </select>
+      <select class="select" name="owner" style="max-width:180px">
+        <option value="">All owners</option>
+        {% for u in users %}<option value="{{ u.id }}" {{ 'selected' if filters.owner==u.id|string }}>{{ u.username }}</option>{% endfor %}
+      </select>
+      <button class="btn ghost" type="submit">{{ icon('search', 15) }} Filter</button>
+      {% if filters.q or filters.status or filters.owner %}<a class="btn quiet sm" href="{{ url_for('admin.servers') }}">Reset</a>{% endif %}
+    </div>
+    <span class="tiny dim">{{ servers | length }} results</span>
+  </form>
+</div>
+
+<div class="glass flush">
+  {% if servers %}
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Server</th><th>Owner</th><th>State</th><th>Image</th><th>Resources</th><th>Price</th><th>Expires</th><th></th></tr></thead>
+      <tbody>
+        {% for server in servers %}
+          {% set meta = server.status | status_meta %}
+          <tr data-server="{{ server.uid }}">
+            <td>
+              <a href="{{ url_for('servers.detail', uid=server.uid) }}" style="font-weight:600;color:var(--ink-0)">{{ server.name }}</a>
+              <div class="tiny dim mono">{{ server.uid }} · {{ server.primary_ip() }}</div>
+            </td>
+            <td class="tiny"><span class="avatar" style="width:22px;height:22px;font-size:10px;display:inline-grid;vertical-align:middle">{{ server.owner.initials if server.owner else '?' }}</span> {{ server.owner.username if server.owner else 'orphan' }}</td>
+            <td>{{ badge(meta.label, meta.tone) }}{% if server.suspended_reason %}<div class="tiny dim">{{ server.suspended_reason }}</div>{% endif %}</td>
+            <td class="mono tiny">{{ server.os_image }}<div class="tiny dim">{{ server.driver }}</div></td>
+            <td class="mono tiny">{{ server.cpu_cores | round(0) | int }}c · {{ (server.ram_mb/1024)|round(1) }}G · {{ server.disk_gb }}G</td>
+            <td class="mono tiny">{{ server.monthly_price | round(2) }} {{ server.currency }}{% if not server.auto_renew %}<div class="tiny dim">no renew</div>{% endif %}</td>
+            <td class="tiny">{{ server.expires_at | fmt_dt if server.expires_at else '—' }}<div class="tiny dim">{{ server.expires_in_days ~ 'd' if server.expires_in_days is not none else '' }}</div></td>
+            <td>
+              <div class="dropdown">
+                <button class="icon-btn ghost sm" data-dropdown>{{ icon('dots', 14) }}</button>
+                <div class="dropdown-menu">
+                  <a href="{{ url_for('servers.detail', uid=server.uid) }}">{{ icon('gauge', 14) }} Cockpit</a>
+                  <button data-suspend="{{ server.uid }}">{{ icon('pause', 14) }} Suspend</button>
+                  <button data-unsuspend="{{ server.uid }}">{{ icon('play', 14) }} Unsuspend</button>
+                  <button data-reassign="{{ server.uid }}">{{ icon('users', 14) }} Reassign</button>
+                  <hr>
+                  <button data-delete="{{ server.uid }}" style="color:var(--crit)">{{ icon('trash', 14) }} Delete</button>
+                </div>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="padding:18px">{{ empty_state('No servers match filter', 'Adjust filters or provision a new instance.', 'search') }}</div>
+  {% endif %}
+</div>
+
+<div class="grid cols-2 mt-3">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('cloud', 16) }} Placement nodes</h3></div>
+    <div class="card-body">
+      {% if nodes %}
+        <div class="chips">{% for n in nodes %}<span class="tag">{{ n.name }} · {{ n.region }} · {{ n.status }}</span> {% endfor %}</div>
+      {% else %}<div class="tiny muted">No remote hypervisors — all workloads on {{ config.get('BACKEND','docker') }}.</div>{% endif %}
+    </div>
+  </div>
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('history', 16) }} Quick actions</h3></div>
+    <div class="card-body row tight">
+      <button class="btn ghost" id="btn-sync-all">{{ icon('refresh', 14) }} Force-sync all states</button>
+      <button class="btn ghost" id="btn-audit">{{ icon('history', 14) }} View audit</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>{% endblock %}

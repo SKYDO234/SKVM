@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, meter, empty_state %}
+{% block title %}Hypervisors{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Hypervisors</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('cloud', 22) }} Hypervisors <span class="badge accent">{{ nodes | length }} nodes</span></h1>
+    <div class="sub">Local docker plus remote <span class="mono">skvm-node</span> agents. Fleet scheduler picks the healthiest node by priority & load.</div>
+  </div>
+  <div class="actions">
+    <button class="btn primary" id="btn-register-node">{{ icon('plus', 16) }} Register node</button>
+    <a class="btn ghost" href="https://github.com/SKYDO234/SKVM" target="_blank">{{ icon('external', 16) }} Agent README</a>
+  </div>
+</div>
+
+<div class="glass flush mb-2">
+  <div class="card-head"><h3>{{ icon('layers', 16) }} Drivers</h3><span class="badge {{ 'good' if backend.docker else 'warn' }}">{{ backend.active }} · {{ 'docker ok' if backend.docker else backend.docker_detail }}</span></div>
+  <div class="card-body kv">
+    <dt>Available backends</dt><dd>{% for b in backends %}<span class="tag">{{ b }}</span> {% endfor %}</dd>
+    <dt>Active</dt><dd class="mono">{{ backend.active }}</dd>
+    <dt>Install snippet</dt><dd class="code-block" style="font-size:11px;padding:10px">curl -fsSL {{ request.url_root }}static/scripts/install-node.sh | sudo bash
+# then paste the key_id + secret issued below into /etc/skvm/node.env</dd>
+  </div>
+</div>
+
+{% if nodes %}
+<div class="grid cols-3">
+  {% for node in nodes %}
+    <div class="glass node-card" data-node="{{ node.id }}">
+      <div class="row between">
+        <b style="color:var(--ink-0)">{{ node.name }}</b>
+        {{ badge(node.status, 'good' if node.status=='online' else ('warn' if node.status=='degraded' else 'muted'), node.status=='online') }}
+      </div>
+      <div class="tiny mono dim truncate">{{ node.endpoint }}</div>
+      <div class="kv tiny">
+        <dt>Region</dt><dd>{{ node.region }}</dd>
+        <dt>Key ID</dt><dd class="mono">{{ node.key_id }}</dd>
+        <dt>Priority</dt><dd>{{ node.priority }} (lower = first)</dd>
+        <dt>Capacity</dt><dd class="mono">{{ node.capacity_cpu }}c · {{ (node.capacity_ram_mb/1024)|round(1) }}G · {{ node.capacity_disk_gb }}G</dd>
+        <dt>Servers</dt><dd><a href="{{ url_for('admin.servers') }}">{{ server_counts.get(node.id, 0) }} on this node</a></dd>
+        <dt>Last seen</dt><dd class="tiny">{{ node.last_seen_at | human_delta if node.last_seen_at else 'never' }}{% if node.last_error %}<div class="tiny dim mono" style="white-space:pre-wrap">{{ node.last_error }}</div>{% endif %}</dd>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm ghost" data-test="{{ node.id }}">{{ icon('activity', 13) }} Test</button>
+        <button class="btn sm ghost" data-edit="{{ node.id }}">{{ icon('settings', 13) }} Edit</button>
+        <button class="btn sm danger-ghost" data-delete="{{ node.id }}">{{ icon('trash', 13) }}</button>
+      </div>
+      {% if node.labels %}
+        <div class="chips">{% for k,v in node.labels.items() %}<span class="tag">{{ k }}={{ v }}</span>{% endfor %}</div>
+      {% endif %}
+    </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="glass" style="padding:18px">{{ empty_state('No remote hypervisors', 'Register a node to spread workloads beyond the panel host. Local driver still works.', 'cloud', '<button class=\"btn primary\" id=\"btn-register-node-2\">Register your first node</button>') }}</div>
+{% endif %}
+
+<div class="glass mt-3">
+  <div class="card-head"><h3>{{ icon('info', 16) }} Wire protocol</h3></div>
+  <div class="card-body small muted">
+    Panel → agent: <span class="mono">X-SKVM-Key / Timestamp / Nonce / Signature</span> = HMAC-SHA256 over <span class="mono">METHOD\nPATH\nTIMESTAMP\nNONCE\nSHA256(body)</span>. Skew 120 s, nonce replay blocked. All read endpoints support long-poll (?wait=) up to 45 s.
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>{% endblock %}

@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import kpi, quota_bars, empty_state, badge, meter %}
+{% block title %}Account{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>Account</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('user', 22) }} {{ current_user.full_name or current_user.username }}
+      <span class="badge accent"><span class="dot"></span>{{ current_user.role | title }}</span>
+      {% if not current_user.is_active %}<span class="badge crit">disabled</span>{% endif %}
+      {% if current_user.totp_enabled %}<span class="badge good">{{ icon('shieldCheck', 12) }} 2FA</span>{% endif %}
+    </h1>
+    <div class="sub mono">{{ current_user.email }} · member since {{ current_user.created_at | fmt_dt }} · <span id="account-id">{{ current_user.username }}</span></div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" data-copy="{{ current_user.email }}">{{ icon('copy', 16) }} Copy e-mail</button>
+    <a class="btn ghost" href="/docs/">{{ icon('book', 16) }} API docs</a>
+    <button class="btn ghost" id="btn-export">{{ icon('download', 16) }} Export data</button>
+  </div>
+</div>
+
+{% if current_user.must_change_password %}
+  <div class="banner warn mb-2">{{ icon('alert', 18) }} <div><b>Password change required.</b> Choose a new password before you can use the console.</div></div>
+{% endif %}
+
+{# KPI strip #}
+{% set tot = totals or {} %}
+<section class="grid cols-4 mb-2">
+  {{ kpi('Servers owned', (tot.servers if tot.servers is defined else usage.rows[0].used if usage and usage.rows else 0), '', 'server', 'a', sub=(tot.running | default(0) ~ ' running' if tot.running is defined else 'across fleet')) }}
+  {{ kpi('Quota headroom', (usage.quotas.servers - usage.usage.servers) if usage and usage.quotas else 0, 'slots', 'layers', 'b', sub='remaining server slots') }}
+  {{ kpi('API tokens', tokens | length, '', 'key', 'c', sub='read · write · power · admin') }}
+  {{ kpi('Active sessions', sessions | length, '', 'clock', 'd', sub='this device highlighted') }}
+</section>
+
+<div class="glass flush mb-2" id="account-tabs">
+  <div class="tabs" data-tabs>
+    <button class="tab active" data-tab="overview">{{ icon('grid', 14) }} Overview</button>
+    <button class="tab" data-tab="profile">{{ icon('user', 14) }} Profile & prefs</button>
+    <button class="tab" data-tab="security">{{ icon('shield', 14) }} Security</button>
+    <button class="tab" data-tab="tokens">{{ icon('key', 14) }} API tokens <span class="badge quiet">{{ tokens | length }}</span></button>
+    <button class="tab" data-tab="keys">{{ icon('code', 14) }} SSH keys <span class="badge quiet">{{ ssh_keys | length }}</span></button>
+    <button class="tab" data-tab="sessions">{{ icon('clock', 14) }} Sessions</button>
+  </div>
+
+  {# ------------- OVERVIEW ------------- #}
+  <div class="tab-panel active" data-tab-panel="overview">
+    <div class="grid cols-2" style="padding:18px">
+      <div class="stack">
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('layers', 16) }} Resource usage</h3><div class="actions"><a class="btn sm quiet" href="{{ url_for('servers.index') }}">Manage servers</a></div></div>
+          <div class="card-body">
+            {% if usage %}{{ quota_bars(usage) }}{% else %}<p class="muted small">No quota data.</p>{% endif %}
+          </div>
+          <div class="card-foot tiny dim">Currency {{ current_user.currency }} · credit {{ current_user.credits | default(0) }} · theme {{ current_user.theme }}</div>
+        </div>
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('info', 16) }} Account details</h3></div>
+          <div class="card-body kv">
+            <dt>Username</dt><dd class="mono">{{ current_user.username }}</dd>
+            <dt>E-mail</dt><dd class="mono">{{ current_user.email }}</dd>
+            <dt>Company</dt><dd>{{ current_user.company or '—' }}</dd>
+            <dt>Timezone</dt><dd>{{ current_user.timezone or 'UTC' }}</dd>
+            <dt>Verified</dt><dd>{{ 'yes' if current_user.is_verified else 'no' }}</dd>
+            <dt>Created</dt><dd class="tiny">{{ current_user.created_at | fmt_dt }} ({{ current_user.created_at | human_delta }})</dd>
+          </div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('shieldCheck', 16) }} Security posture</h3><span class="badge {{ 'good' if current_user.totp_enabled else 'warn' }}">{{ 'protected' if current_user.totp_enabled else 'no 2FA' }}</span></div>
+          <div class="card-body">
+            <div class="meter mb-2 {{ 'good' if current_user.totp_enabled else 'warn' }}"><i style="width: {{ 100 if current_user.totp_enabled else 42 }}%"></i></div>
+            <ul class="small muted" style="margin:0;padding-left:18px;line-height:1.7">
+              <li>Password: {{ password_policy }}-char minimum · 3-of-4 character classes</li>
+              <li>Two-factor: {{ 'enabled' if current_user.totp_enabled else 'disabled — enable in Security tab' }}</li>
+              <li>Sessions: {{ sessions | length }} active · revoke any time</li>
+              <li>Recovery codes: {{ current_user.recovery_codes | length }} stored (hashed)</li>
+            </ul>
+          </div>
+        </div>
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('bell', 16) }} Notifications</h3></div>
+          <div class="card-body kv">
+            {% set prefs = current_user.notify_prefs or {} %}
+            <dt>E-mail alerts</dt><dd>{{ 'on' if prefs.email is not defined or prefs.email else 'off' }}</dd>
+            <dt>Webhook</dt><dd class="mono tiny truncate">{{ prefs.webhook or '—' }}</dd>
+            <dt>Downtime mails</dt><dd>{{ 'on' if prefs.downtime else 'off' }}</dd>
+          </div>
+        </div>
+        <div class="notice-strip pinned">
+          {{ icon('spark', 18) }}<div><b>Tip:</b> Put an <span class="mono">SKVM_TOKEN</span> in your shell and drive the panel from <span class="mono">curl</span> — see <a href="{{ url_for('docs.index') }}">API & docs</a>.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ------------- PROFILE ------------- #}
+  <div class="tab-panel" data-tab-panel="profile">
+    <form id="profile-form" class="card-body">
+      <div class="grid cols-2">
+        <div class="field"><label for="full_name">Display name</label><input class="input" id="full_name" name="full_name" value="{{ current_user.full_name }}"></div>
+        <div class="field"><label for="company">Company</label><input class="input" id="company" name="company" value="{{ current_user.company }}"></div>
+        <div class="field"><label for="email">E-mail address</label><input class="input" id="email" name="email" type="email" value="{{ current_user.email }}" required></div>
+        <div class="field"><label for="timezone">Timezone</label><input class="input" id="timezone" name="timezone" value="{{ current_user.timezone }}" placeholder="UTC"></div>
+        <div class="field"><label for="theme">Theme</label>
+          <select class="select" id="theme" name="theme">
+            {% for th in ['midnight','obsidian','aurora','daylight'] %}<option value="{{ th }}" {{ 'selected' if current_user.theme == th }}>{{ th | title }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label>Currency</label>
+          <div class="mono tiny dim" style="padding:11px 0">{{ current_user.currency }} · managed by an admin (billing settings)</div>
+        </div>
+      </div>
+      <div class="field"><label>Notify preferences (JSON)</label>
+        <div class="row tight">
+          <label class="checkbox" style="margin:0"><input type="checkbox" id="notify-email" {{ 'checked' if (current_user.notify_prefs or {}).get('email', true) }}><span>E-mail</span></label>
+          <input class="input" id="notify-webhook" placeholder="https://hooks.example.com/skvm" value="{{ (current_user.notify_prefs or {}).get('webhook','') }}" style="flex:1">
+        </div>
+        <div class="hint">Webhook receives the same JSON as alert-delivery webhooks (fleet-wide).</div>
+      </div>
+      <div class="row">
+        <button class="btn primary" type="submit">{{ icon('save', 16) }} Save profile</button>
+        <span class="tiny dim" id="profile-state"></span>
+      </div>
+    </form>
+  </div>
+
+  {# ------------- SECURITY ------------- #}
+  <div class="tab-panel" data-tab-panel="security">
+    <div class="grid cols-2" style="padding:18px">
+      <div class="glass flush">
+        <div class="card-head"><h3>{{ icon('lock', 16) }} Change password</h3></div>
+        <div class="card-body">
+          <form id="password-form" class="stack">
+            <div class="field"><label for="cur-pass">Current password</label><input class="input" id="cur-pass" type="password" autocomplete="current-password" required></div>
+            <div class="field"><label for="new-pass">New password</label>
+              <input class="input" id="new-pass" type="password" autocomplete="new-password" required>
+              <div class="pw-meter"><i id="pw-bar" style="width:0%"></i></div>
+              <div class="tiny dim" id="pw-label">Type to see strength</div>
+            </div>
+            <div class="field"><label for="confirm-pass">Confirm</label><input class="input" id="confirm-pass" type="password" required></div>
+            <button class="btn primary" type="submit">{{ icon('save', 16) }} Update password</button>
+            <div class="tiny dim">Policy: ≥{{ password_policy }} chars, 3-of-4 classes. Changing it signs every other session out.</div>
+          </form>
+        </div>
+      </div>
+
+      <div class="stack">
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('shield', 16) }} Two-factor (TOTP)</h3>
+            {% if current_user.totp_enabled %}<span class="badge good">enabled</span>{% else %}<span class="badge warn">disabled</span>{% endif %}
+          </div>
+          <div class="card-body stack" id="twofa-box">
+            {% if current_user.totp_enabled %}
+              <div class="banner good">{{ icon('check', 18) }} <div><b>Two-factor is active.</b> Keep your recovery codes safe — the panel only stores hashes.</div></div>
+              <div class="row tight">
+                <button class="btn ghost" id="btn-2fa-codes">{{ icon('copy', 14) }} Regenerate recovery codes</button>
+                <button class="btn danger-ghost" id="btn-2fa-disable">{{ icon('shieldOff', 14) }} Disable 2FA</button>
+              </div>
+            {% else %}
+              <p class="small muted">Add a time-based code from any authenticator (Google Authenticator, 1Password, Authy).</p>
+              <button class="btn primary" id="btn-2fa-setup">{{ icon('shieldCheck', 16) }} Enable 2FA</button>
+              <div id="twofa-setup" class="hidden">
+                <div class="qr-wrap hidden" id="qr-wrap"><div id="qrcode"></div></div>
+                <div class="field"><label>Secret (manual entry)</label><div class="input mono tiny" id="twofa-secret">—</div></div>
+                <div class="field"><label for="twofa-code">6-digit code</label>
+                  <div class="input-group"><input class="input mono totp-input" id="twofa-code" maxlength="6" placeholder="123456"><button class="btn primary" id="btn-2fa-enable" type="button">Verify</button></div>
+                </div>
+                <div class="field hidden" id="recovery-box"><label>Recovery codes — copy now</label><div class="code-block" id="recovery-codes"></div></div>
+              </div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="glass">
+          <div class="card-head"><h3>{{ icon('info', 16) }} Why it matters</h3></div>
+          <div class="card-body small muted">Sessions are bound to one browser and can be revoked individually. If your role is staff, administrators can enforce 2FA via <span class="mono">require_2fa_for_staff</span>.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# ------------- TOKENS ------------- #}
+  <div class="tab-panel" data-tab-panel="tokens">
+    <div class="table-toolbar">
+      <div class="row tight grow" style="flex:1"><h3 style="margin:0">{{ icon('key', 16) }} Personal API tokens</h3>
+        <span class="badge quiet">bearer · scopes · optional IP allowlist</span>
+      </div>
+      <button class="btn primary" id="btn-new-token">{{ icon('plus', 16) }} Create token</button>
+    </div>
+    {% if tokens %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Token</th><th>Scopes</th><th>Use</th><th>Expires</th><th></th></tr></thead>
+          <tbody>
+            {% for token in tokens %}
+              <tr data-token="{{ token.id }}" class="{{ 'dim' if token.revoked_at else '' }}">
+                <td>
+                  <b class="mono">{{ token.name }}</b>
+                  <div class="tiny dim mono"><span data-copy="{{ token.prefix }}">{{ token.prefix }}…••••</span> · {{ token.created_at | fmt_dt }}</div>
+                </td>
+                <td>{% for s in token.scopes or [] %}<span class="tag">{{ s }}</span> {% endfor %}
+                  {% if token.ip_allowlist %}<div class="tiny dim mono">{{ token.ip_allowlist | join(', ') }}</div>{% endif %}
+                </td>
+                <td class="mono tiny">{{ token.call_count or 0 }} calls · {{ token.last_used_at | human_delta if token.last_used_at else 'never' }}</td>
+                <td class="tiny">{{ token.expires_at | fmt_dt if token.expires_at else 'never' }}{% if token.revoked_at %} · revoked{% endif %}</td>
+                <td class="row-actions">
+                  <button class="btn sm ghost" data-token-edit="{{ token.id }}">{{ icon('settings', 13) }}</button>
+                  <button class="btn sm danger-ghost" data-token-revoke="{{ token.id }}" {{ 'disabled' if token.revoked_at }}>{{ icon('trash', 13) }}</button>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-foot tiny dim">
+        Scopes:
+        {% for sid in scopes %}<span class="chip" style="pointer-events:none">{{ sid }} — {{ scope_descriptions.get(sid,'') }}</span> {% endfor %}
+      </div>
+    {% else %}
+      <div style="padding:18px">{{ empty_state('No tokens yet', 'Create a write-scoped token and drive every endpoint from your CI or laptop.', 'key', '<button class=\"btn primary\" id=\"btn-new-token-2\">Create your first token</button>') }}</div>
+    {% endif %}
+  </div>
+
+  {# ------------- SSH KEYS ------------- #}
+  <div class="tab-panel" data-tab-panel="keys">
+    <div class="table-toolbar">
+      <h3 style="margin:0">{{ icon('code', 16) }} SSH keys (injected via cloud-init)</h3>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btn-add-key">{{ icon('plus', 16) }} Add public key</button>
+      <button class="btn ghost" id="btn-gen-key">{{ icon('spark', 16) }} Generate keypair</button>
+    </div>
+    {% if ssh_keys %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Key</th><th>Fingerprint</th><th>Added</th><th></th></tr></thead>
+          <tbody>
+            {% for key in ssh_keys %}
+              <tr data-key="{{ key.id }}">
+                <td><b>{{ key.name }}</b><div class="tiny mono dim">{{ key.key_type }}</div></td>
+                <td class="mono tiny">{{ key.fingerprint }}</td>
+                <td class="tiny">{{ key.created_at | fmt_dt }}</td>
+                <td class="row-actions"><button class="btn sm danger-ghost" data-key-delete="{{ key.id }}">{{ icon('trash', 13) }}</button></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding:18px">{{ empty_state('No SSH keys on file', 'Upload one key and new servers are bootstrapped with it. Existing machines are untouched.', 'key') }}</div>
+    {% endif %}
+    <div class="card-body tiny muted">Public keys are stored as-is; only the SHA-256 fingerprint is indexed. Add one during <a href="{{ url_for('servers.new') }}">server creation</a> too.</div>
+  </div>
+
+  {# ------------- SESSIONS ------------- #}
+  <div class="tab-panel" data-tab-panel="sessions">
+    <div class="table-toolbar">
+      <h3 style="margin:0">{{ icon('clock', 16) }} Browser sessions</h3>
+      <span class="badge quiet">{{ sessions | length }} active</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" id="btn-revoke-others">{{ icon('logout', 14) }} Sign out others</button>
+    </div>
+    {% if sessions %}
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th></th><th>Session</th><th>Device</th><th>Last seen</th><th></th></tr></thead>
+          <tbody>
+            {% for sess in sessions %}
+              <tr class="{{ 'row-selected' if sess.id == active_session_id }}">
+                <td>{% if sess.id == active_session_id %}<span class="badge accent tiny">this device</span>{% endif %}</td>
+                <td class="mono tiny">{{ sess.ip }}<div class="tiny dim mono truncate" style="max-width:240px">{{ sess.user_agent }}</div></td>
+                <td class="tiny">{{ sess.device }}</td>
+                <td class="tiny">{{ sess.last_seen_at | fmt_dt }}<div class="tiny dim">{{ sess.last_seen_at | human_delta }}</div></td>
+                <td class="row-actions">
+                  {% if sess.id != active_session_id %}<button class="btn sm quiet" data-session-revoke="{{ sess.id }}">{{ icon('x', 13) }} Revoke</button>{% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div style="padding:18px">{{ empty_state('No sessions recorded', 'Something deleted them — sign in again.', 'clock') }}</div>
+    {% endif %}
+    <div class="card-body tiny dim">Each browser gets its own revocable token (cookie <span class="mono">skvm_session</span>). Closing the tab does not sign you out — revoke explicitly when on a shared device.</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/qrcode/qrcode.bundle.js') }}"></script>
+<script id="account-data" type="application/json">{{ {
+  'scopes': scopes,
+  'scopeDescriptions': scope_descriptions,
+  'quota': usage,
+  'sessions': sessions | map(attribute='id') | list,
+  'activeSession': active_session_id,
+  'totpEnabled': current_user.totp_enabled,
+  'username': current_user.username,
+  'passwordPolicy': password_policy,
+} | tojson }}</script>
+<script src="{{ url_for('static', filename='js/pages/account.js') }}"></script>
+{% endblock %}

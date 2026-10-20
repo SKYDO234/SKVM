@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% block title %}API & docs{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span><strong>API & docs</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('book', 22) }} SKVM docs
+      <span class="badge accent">REST v1 · {{ panel.version }}</span>
+    </h1>
+    <div class="sub mono">{{ panel_url or request.host_url.rstrip('/') }} · driver <b>{{ backend.active }}</b> · {{ backends | length }} backends available · same-origin cookies or Bearer tokens</div>
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('account.index') }}#tokens">{{ icon('key', 16) }} Create a token</a>
+    <button class="btn ghost" data-copy="{{ panel_url or request.host_url.rstrip('/') }}" data-tip="Copy panel URL">{{ icon('copy', 16) }} Copy panel URL</button>
+  </div>
+</div>
+
+<div class="docs-layout">
+  <nav class="glass docs-nav" style="padding:14px">
+    <div class="tiny dim" style="letter-spacing:.14em;text-transform:uppercase;margin:4px 12px">On this page</div>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#auth">Authentication</a>
+    <a href="#endpoints">Endpoint groups</a>
+    <a href="#examples">curl examples</a>
+    <a href="#cli">manage.py CLI</a>
+    <a href="#nodes">Node agent</a>
+    <a href="#scopes">Token scopes</a>
+  </nav>
+
+  <div class="stack">
+    {# Quickstart #}
+    <section class="glass" id="quickstart">
+      <div class="card-head"><h3>{{ icon('rocket', 16) }} Quickstart</h3><span class="badge good">5 min</span></div>
+      <div class="card-body">
+        <ol class="steps-list" style="padding-left:18px">
+          <li>Go to <a href="{{ url_for('account.index') }}#tokens">Account → API tokens</a> and create a token (scope <span class="mono">read + write + power</span>). Copy the one-time secret.</li>
+          <li>Store it locally:</li>
+        </ol>
+        <div class="code-block" style="margin:14px 0">
+<span id="quick-code">export SKVM_TOKEN="<span class="tag tiny">sk_…</span>"
+export PANEL="{{ panel_url or request.host_url.rstrip('/') }}"
+
+# who am I?
+curl -sS $PANEL/api/v1/account \
+  -H "Authorization: Bearer $SKVM_TOKEN" | jq .</span>
+          <button class="btn sm ghost copy" data-copy-from="#quick-code" style="top:8px">{{ icon('copy', 14) }}</button>
+        </div>
+        <div class="grid cols-3">
+          <div class="notice-strip">{{ icon('check', 18) }} <div><b>Session cookies also work.</b><div class="tiny dim">When inside the panel, <span class="mono">fetch()</span> just needs <span class="mono">X-CSRF-Token</span>.</div></div></div>
+          <div class="notice-strip warn">{{ icon('alert', 18) }} <div><b>Never ship a token in git.</b><div class="tiny dim">Revoke it from Account → API tokens the moment you leak it.</div></div></div>
+          <div class="notice-strip pinned">{{ icon('shieldCheck', 18) }} <div><b>Scopes are additive</b><div class="tiny dim">A token without <span class="mono">power</span> cannot stop a server (402 → 403).</div></div></div>
+        </div>
+      </div>
+    </section>
+
+    {# Auth #}
+    <section class="glass" id="auth">
+      <div class="card-head"><h3>{{ icon('shield', 16) }} Authentication</h3><span class="badge quiet">Session ∨ Bearer</span></div>
+      <div class="card-body">
+        <div class="grid cols-2">
+          <div>
+            <h4>Bearer (CI, scripts, Terraform)</h4>
+            <div class="code-block" style="margin-top:8px">Authorization: Bearer &lt;sk_XXXX.yyyyy&gt;
+X-API-Key: &lt;same value&gt;   # legacy header
+GET /api/v1/summary?token=&lt;sk_…&gt;  # query fallback</div>
+            <p class="small muted mt-1">Tokens carry a prefix (<span class="mono">sk_xxxx</span>) visible in audit logs; only the hash is stored. IP allowlists and expiry are optional.</p>
+          </div>
+          <div>
+            <h4>Cookie (in-panel JS)</h4>
+            <div class="code-block" style="margin-top:8px">fetch('/api/v1/servers', {
+  headers: { 'X-CSRF-Token': document.querySelector('meta[name=csrf-token]').content }
+})</div>
+            <p class="small muted mt-1">Session cookies are HttpOnly, SameSite-Lax, <span class="mono">skvm_session</span> and revocable individually under Account → Sessions.</p>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="kv">
+          <dt>Panel URL</dt><dd class="mono">{{ panel_url or request.host_url.rstrip('/') }}</dd>
+          <dt>Active driver</dt><dd class="mono">{{ backend.active }} — {{ backend.docker_detail if backend.docker_detail is defined else 'docker ' ~ ('connected' if backend.docker else 'not connected') }}</dd>
+          <dt>Rate limiting</dt><dd>{{ config.get('RATELIMIT_DEFAULT','600 per minute') }} · <span class="mono">429</span> with <span class="mono">Retry-After</span> header</dd>
+          <dt>Accepts</dt><dd class="mono">application/json · query/form · bearer · cookie</dd>
+        </div>
+      </div>
+    </section>
+
+    {# Endpoint groups from docs.py #}
+    <section class="glass flush" id="endpoints">
+      <div class="card-head"><h3>{{ icon('code', 16) }} Endpoint groups</h3><span class="badge quiet">{{ groups | length }} groups · {{ groups | map(attribute='endpoints') | map('length') | sum }} endpoints</span></div>
+      {% for group in groups %}
+        <div style="padding:18px 18px 0"><h4 style="margin:0 0 4px">{{ group.title }}</h4><p class="muted small mb-0">{{ group.blurb }}</p></div>
+        {% for ep in group.endpoints %}
+          <div class="endpoint">
+            <span class="method {{ ep.method }}">{{ ep.method }}</span>
+            <div style="min-width:0">
+              <code class="mono" style="color:var(--ink-0);word-break:break-all">{{ ep.path }}</code>
+              <div class="tiny muted mt-1">{{ ep.desc }} · scope <span class="tag">{{ ep.scope }}</span></div>
+            </div>
+          </div>
+        {% endfor %}
+        {% if not loop.last %}<div class="divider" style="margin:0"></div>{% endif %}
+      {% endfor %}
+      <div style="padding:14px 18px" class="tiny dim">Full machine index at <a class="mono" href="/api/v1/meta">GET /api/v1/meta</a> and paginated listings at <span class="mono">?page=&per_page=</span> (max 200).</div>
+    </section>
+
+    {# curl examples #}
+    <section class="glass" id="examples">
+      <div class="card-head"><h3>{{ icon('terminal', 16) }} curl examples</h3><span class="badge good">copy-paste</span></div>
+      <div style="padding:10px 0">
+        {% for ex in examples %}
+          <div style="padding:12px 18px">
+            <div class="row between"><b>{{ ex.title }}</b><button class="btn sm ghost" data-copy="{{ ex.command }}">{{ icon('copy', 13) }} Copy</button></div>
+            <div class="code-block" style="margin-top:8px">{{ ex.command }}</div>
+          </div>
+          {% if not loop.last %}<div class="divider" style="margin:0"></div>{% endif %}
+        {% endfor %}
+      </div>
+    </section>
+
+    {# CLI #}
+    <section class="glass flush" id="cli">
+      <div class="card-head"><h3>{{ icon('terminal', 16) }} CLI (manage.py)</h3><span class="badge quiet">{{ current_user.username if current_user else 'admin' }} context</span></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
+          <tbody>
+            {% for cmd, desc in cli %}
+              <tr>
+                <td class="mono">{{ cmd }}</td>
+                <td class="small muted">{{ desc }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    {# Node agent #}
+    <section class="glass" id="nodes">
+      <div class="card-head"><h3>{{ icon('cloud', 16) }} Remote hypervisor (node agent)</h3><span class="badge quiet">HMAC-signed</span></div>
+      <div class="card-body">
+        <p class="small muted">Remote nodes speak a signed REST protocol — <span class="mono">X-SKVM-Key / Timestamp / Nonce / Signature</span> (SHA-256 body, 120 s skew, replay-protected). The panel schedules new servers to the least-loaded healthy node.</p>
+        {% for step in node_docs %}
+          <div class="endpoint">
+            <span class="method {{ 'POST' if loop.first else 'GET' }}">{{ loop.index }}</span>
+            <div style="min-width:0">
+              <b class="mono">{{ step.title }}</b>
+              <div class="code-block" style="margin-top:6px">{{ step.command }}</div>
+            </div>
+          </div>
+        {% endfor %}
+        <div class="divider"></div>
+        <div class="kv">
+          <dt>Auth model</dt><dd class="mono">HMAC SHA-256 · PATH + METHOD + TIMESTAMP + NONCE + SHA256(body)</dd>
+          <dt>Agent script</dt><dd class="mono">static/scripts/install-node.sh &amp; agent/skvm-node.py (vendored)</dd>
+          <dt>Register it at</dt><dd><a href="{{ url_for('admin.nodes') }}">Admin → Hypervisors → Register node</a></dd>
+          <dt>Backends seen</dt><dd>{% for b in backends %}<span class="tag">{{ b }}</span> {% endfor %}</dd>
+        </div>
+      </div>
+    </section>
+
+    {# Scopes #}
+    <section class="glass flush" id="scopes">
+      <div class="card-head"><h3>{{ icon('key', 16) }} Token scopes</h3><span class="badge quiet">{{ scopes | length }} scopes</span></div>
+      <div class="table-wrap">
+        <table class="data">
+          <thead><tr><th>Scope</th><th>Allows</th></tr></thead>
+          <tbody>
+            {% for s in scopes %}
+              <tr><td class="mono">{{ s }}</td><td class="small muted">{{ scope_descriptions.get(s,'') }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body tiny dim">Add <span class="mono">admin</span> only to staff-owned tokens; normal users cannot mint it (route returns 403). The panel also enforces backend capability strings — e.g. <span class="mono">snapshots</span> vs <span class="mono">console</span> — surfacing <span class="mono">NotSupported → 502</span> when the driver lacks a feature.</div>
+    </section>
+  </div>
+</div>
+{% endblock %}

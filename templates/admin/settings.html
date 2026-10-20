@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge %}
+{% block title %}Panel settings{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Settings</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('settings', 22) }} Panel settings</h1>
+    <div class="sub">Runtime-tunable product switches (stored in <span class="mono">settings</span> table, 5 s cache). Secrets & infra stay in env/config — never here.</div>
+  </div>
+  <div class="actions">
+    <button class="btn ghost" id="btn-reload">{{ icon('refresh', 16) }} Reload</button>
+    <button class="btn primary" id="btn-save-all">{{ icon('save', 16) }} Save changes</button>
+  </div>
+</div>
+
+{% if values.maintenance_mode %}
+  <div class="banner warn mb-2">{{ icon('pause', 18) }} <div><b>Maintenance mode is ON.</b> Only staff can sign in. Message: “{{ values.maintenance_message }}”</div></div>
+{% endif %}
+
+<div class="grid cols-2">
+  <div class="glass">
+    <div class="card-head"><h3>{{ icon('shield', 16) }} Access & lifecycle</h3></div>
+    <div class="card-body stack" id="settings-form">
+      {# group booleans #}
+      {% for key,label,hint in [
+        ('allow_registration','Open registration','Let new users sign up without invite'),
+        ('require_approval','Require admin approval','New accounts stay blocked until an admin enables them'),
+        ('maintenance_mode','Maintenance mode','Freeze the panel — staff-only access'),
+        ('console_enabled','Web console','Allow the browser SSH terminal'),
+        ('file_manager_enabled','File manager','Allow the file browser / editor'),
+        ('api_enabled','Public API','Allow /api/v1 with bearer tokens'),
+        ('allow_self_delete','Let users delete own servers','Disable to prevent user-initiated destruction'),
+        ('allow_user_snapshots','User snapshots','Let users take instant images'),
+        ('allow_user_backups','User backups','Let users stream full backups'),
+        ('allow_user_reinstall','User reinstall','Let users reinstall the OS & rotate password'),
+        ('status_page_public','Public status page','/status visible without login'),
+        ('billing_enabled','Billing UI','Show price/run-rate and expiry controls'),
+        ('require_2fa_for_staff','Enforce 2FA for staff','Operators must enable TOTP'),
+        ('alert_email_enabled','Alert e-mails','Worker delivers alert state changes by mail'),
+      ] %}
+        <label class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+          <div><b>{{ label }}</b><div class="tiny dim">{{ hint }}</div></div>
+          <label class="switch"><input type="checkbox" data-key="{{ key }}" {{ 'checked' if values.get(key) }}><span class="track"><span class="knob"></span></span></label>
+        </label>
+      {% endfor %}
+
+      <div class="field"><label>Panel notice (top banner, e.g. incident)</label><input class="input" data-key="panel_notice" value="{{ values.panel_notice }}"><div class="hint">Empty = no banner. Level:</div>
+        <select class="select" data-key="panel_notice_level" style="margin-top:6px;max-width:180px">
+          {% for lvl in ['info','warn','crit','good'] %}<option value="{{ lvl }}" {{ 'selected' if values.panel_notice_level==lvl }}>{{ lvl }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Welcome message (landing)</label><textarea class="input" rows="2" data-key="welcome_message">{{ values.welcome_message }}</textarea></div>
+      <div class="field"><label>Maintenance message</label><textarea class="input" rows="2" data-key="maintenance_message">{{ values.maintenance_message }}</textarea></div>
+      <div class="grid cols-2">
+        <div class="field"><label>Default OS image</label><input class="input mono" data-key="default_os" value="{{ values.default_os }}"></div>
+        <div class="field"><label>Currency (USD/EUR/INR…)</label><input class="input" data-key="currency" value="{{ values.currency }}" maxlength="8"></div>
+        <div class="field"><label>Session lifetime (hours)</label><input class="input" type="number" data-key="session_lifetime_hours" value="{{ values.session_lifetime_hours }}" min="1"></div>
+        <div class="field"><label>Metrics retention (days)</label><input class="input" type="number" data-key="metrics_retention_days" value="{{ values.metrics_retention_days }}" min="1"></div>
+        <div class="field"><label>Signup credits</label><input class="input" type="number" step="0.01" data-key="signup_credits" value="{{ values.signup_credits }}"></div>
+      </div>
+
+      <div class="field">
+        <label>Default quotas (new users inherit these)</label>
+        <div class="grid cols-3" style="gap:10px">
+          {% set dq = values.default_quotas or defaults.default_quotas %}
+          {% for k in ['servers','cpu','ram_mb','disk_gb','snapshots','bandwidth_gb'] %}
+            <div><label class="tiny dim">{{ k }}</label><input class="input" type="number" data-quota="{{ k }}" value="{{ dq.get(k,0) }}"></div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="row tight">
+        <button class="btn primary" id="btn-save">{{ icon('save', 15) }} Save operator settings</button>
+        <span class="tiny dim" id="save-state"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="stack">
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('database', 16) }} Effective config (read-only)</h3><span class="badge quiet">env + computed</span></div>
+      <div class="card-body">
+        <div class="kv" style="font-size:12.5px">
+          {% for key,val in config_view.items() %}
+            <dt class="mono tiny">{{ key }}</dt><dd class="mono tiny">{{ val }}</dd>
+          {% endfor %}
+        </div>
+        <div class="divider"></div>
+        <div class="row tight"><span class="tiny dim">To change these, edit env / docker-compose / systemd unit.</span></div>
+      </div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('layers', 16) }} Stored rows ({{ rows | length }})</h3></div>
+      <div class="table-wrap">
+        <table class="data compact">
+          <thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td class="mono tiny">{{ row.key }}</td>
+                <td class="mono tiny truncate" style="max-width:260px">{{ row.value | tojson }}</td>
+                <td><button class="btn sm quiet" data-reset="{{ row.key }}">{{ icon('refresh', 12) }} reset</button></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="card-body tiny dim">Reset restores the default from <span class="mono">services.settings.DEFAULTS</span>.</div>
+    </div>
+
+    <div class="glass">
+      <div class="card-head"><h3>{{ icon('activity', 16) }} Current backend</h3></div>
+      <div class="card-body kv">
+        <dt>Active</dt><dd class="mono">{{ backend.active }}</dd>
+        <dt>Docker</dt><dd>{{ 'connected' if backend.docker else backend.docker_detail }}</dd>
+        <dt>Available</dt><dd>{% for b in backends %}<span class="tag">{{ b }}</span> {% endfor %}</dd>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import badge, empty_state %}
+{% block title %}Announcements{% endblock %}
+{% block crumbs %}
+  <a href="{{ url_for('dashboard.dashboard_page') }}">Console</a><span class="sep">/</span>
+  <a href="{{ url_for('admin.index') }}">Admin</a><span class="sep">/</span><strong>Announcements</strong>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div class="titles">
+    <h1>{{ icon('bell', 22) }} Announcements</h1>
+    <div class="sub">Dashboard banners broadcast to users (sticky + level). Shown on the command deck.</div>
+  </div>
+  <div class="actions"><button class="btn primary" id="btn-new-ann">{{ icon('plus', 16) }} New announcement</button></div>
+</div>
+
+{% if not announcements %}
+  <div class="glass" style="padding:18px">{{ empty_state('No announcements yet', 'Publish one to show a banner on the dashboard — pin it for stickiness.', 'bell', '<button class=\"btn primary\" id=\"btn-new-ann-2\">Create announcement</button>') }}</div>
+{% else %}
+<div class="stack mb-3">
+  {% for note in announcements %}
+    <div class="glass" style="border-left:4px solid {% if note.level=='crit' or note.level=='critical' %}var(--crit){% elif note.level=='warn' %}var(--warn){% elif note.level=='good' %}var(--good){% else %}var(--info){% endif %}">
+      <div class="card-head">
+        <h3 style="margin:0">{{ note.title }}</h3>
+        {{ badge(note.level, 'crit' if note.level in ['crit','critical'] else ('warn' if note.level=='warn' else 'info')) }}
+        {% if note.pinned %}<span class="badge accent tiny">{{ icon('spark', 11) }} pinned</span>{% endif %}
+        {% if not note.active %}<span class="badge muted tiny">hidden</span>{% endif %}
+        <div class="spacer"></div>
+        <span class="tiny dim">{{ note.created_at | fmt_dt if note.created_at else '' }} · {{ note.created_by }}</span>
+      </div>
+      <div class="card-body">
+        <div class="small" style="white-space:pre-wrap">{{ note.body }}</div>
+        <div class="tiny dim mt-1">Audience: {{ note.audience | default('all') }} · ID {{ note.id }}</div>
+      </div>
+      <div class="card-foot">
+        <button class="btn sm ghost" data-edit-ann="{{ note.id }}">{{ icon('settings', 13) }} Edit</button>
+        <button class="btn sm quiet" data-toggle-ann="{{ note.id }}" data-active="{{ 1 if note.active else 0 }}">{{ icon('eyeOff' if note.active else 'eye', 13) }} {{ 'Hide' if note.active else 'Show' }}</button>
+        <button class="btn sm danger-ghost" data-delete-ann="{{ note.id }}">{{ icon('trash', 13) }} Delete</button>
+      </div>
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="glass">
+  <div class="card-head"><h3>{{ icon('info', 16) }} How it surfaces</h3></div>
+  <div class="card-body small muted">
+    Active announcements render as <span class="badge accent">info/warn/crit/good</span> strips at the top of <a href="{{ url_for('dashboard.dashboard_page') }}">Overview</a> (pinned ones stay visible across sessions). Audience <span class="mono">staff</span> limits to operator+ dashboards; default <span class="mono">all</span> reaches everyone.
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/pages/admin.js') }}"></script>{% endblock %}
