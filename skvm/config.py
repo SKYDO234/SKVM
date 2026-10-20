@@ -13,7 +13,6 @@ import stat
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-INSTANCE_DIR = Path(os.environ.get("SKVM_INSTANCE_DIR") or (BASE_DIR / "instance"))
 DEFAULT_IMAGE_DIR = BASE_DIR / "vm-images"
 
 
@@ -29,6 +28,37 @@ def _load_dotenv(path: Path) -> None:
         key = key.strip()
         value = value.strip().strip('"').strip("'")
         os.environ.setdefault(key, value)
+
+
+def _load_dotenv_files() -> None:
+    """Read ``.env`` files *before* any configuration value is evaluated.
+
+    The config classes below call the ``_env_*`` helpers in their class bodies,
+    which run at import time - so a ``.env`` loaded later (e.g. from
+    ``create_app()``) would be ignored for every key except the ones read
+    lazily at runtime.  Real environment variables always win: ``_load_dotenv``
+    uses ``setdefault``.
+    """
+    candidates: list[Path] = []
+    override = os.environ.get("SKVM_INSTANCE_DIR")
+    if override:
+        candidates.append(Path(override).expanduser() / ".env")
+    candidates += [BASE_DIR / "instance" / ".env", BASE_DIR / ".env", Path.cwd() / ".env"]
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        if path.is_file():
+            _load_dotenv(path)
+
+
+_load_dotenv_files()
+
+# Recomputed after the environment file is in, so SKVM_INSTANCE_DIR can also
+# come from ``.env``.
+INSTANCE_DIR = Path(os.environ.get("SKVM_INSTANCE_DIR") or (BASE_DIR / "instance"))
 
 
 def _env_bool(name: str, default: bool = False) -> bool:

@@ -284,7 +284,9 @@ def _load() -> None:
                 tree=VNode.from_dict(data["tree"]) if data.get("tree") else VNode("/", "dir", 0o755),
             )
             _FLEET[key] = instance
-        log.info("demo fleet restored (%d instance(s))", len(_FLEET))
+        # Debug level on purpose: every backend construction reloads the state
+        # file, and an INFO line per request buries the real log.
+        log.debug("demo fleet restored (%d instance(s))", len(_FLEET))
     except Exception as exc:  # pragma: no cover
         log.warning("demo state ignored: %s", exc)
 
