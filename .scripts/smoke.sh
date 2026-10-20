@@ -23,6 +23,11 @@ BODY="$(mktemp)"
 JAR="$(mktemp)"
 trap 'rm -f "$BODY" "$JAR"' EXIT
 
+# Set SMOKE_PROTO=https when the panel enforces TLS (SKVM_FORCE_HTTPS) and you
+# are testing it over plain http on localhost, e.g. behind an https-only proxy.
+PROTO_HEADER=()
+if [ -n "${SMOKE_PROTO:-}" ]; then PROTO_HEADER=(-H "X-Forwarded-Proto: ${SMOKE_PROTO}"); fi
+
 say() { printf '%s\n' "$*"; }
 bad() { printf '  !! %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
 
@@ -53,7 +58,7 @@ start_if_needed() {
 expect_status() { # expect_status <wanted> <path> [accept]
   local wanted="$1" path="$2" accept="${3:-text/html}" code
   CHECKS=$((CHECKS + 1))
-  code="$(curl -s -o "$BODY" -w '%{http_code}' -m 25 -b "$JAR" -H "Accept: ${accept}" "${BASE}${path}")"
+  code="$(curl -s -o "$BODY" -w '%{http_code}' -m 25 -b "$JAR" "${PROTO_HEADER[@]}" -H "Accept: ${accept}" "${BASE}${path}")"
   if [ "$code" = "$wanted" ]; then
     printf '  ok   %-46s %s\n' "$path" "$code"
   else
@@ -65,7 +70,7 @@ expect_status() { # expect_status <wanted> <path> [accept]
 expect_contains() { # expect_contains <needle> <path> [accept]
   local needle="$1" path="$2" accept="${3:-text/html}"
   CHECKS=$((CHECKS + 1))
-  curl -s -o "$BODY" -m 25 -b "$JAR" -H "Accept: ${accept}" "${BASE}${path}"
+  curl -s -o "$BODY" -m 25 -b "$JAR" "${PROTO_HEADER[@]}" -H "Accept: ${accept}" "${BASE}${path}"
   if grep -qF -- "$needle" "$BODY"; then
     printf '  ok   %-46s contains %s\n' "$path" "$needle"
   else
@@ -76,14 +81,14 @@ expect_contains() { # expect_contains <needle> <path> [accept]
 
 login() { # one cookie jar, one CSRF token, exactly like the browser does
   local pw="$1" token
-  token="$(curl -s -c "$JAR" -m 20 "${BASE}/login" | sed -n 's/.*csrf-token" content="\([^"]*\)".*/\1/p' | head -1)"
+  token="$(curl -s -c "$JAR" -m 20 "${PROTO_HEADER[@]}" "${BASE}/login" | sed -n 's/.*csrf-token" content="\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$token" ]; then
     bad "no csrf token on /login"
     return 1
   fi
   local code
   code="$(curl -s -b "$JAR" -c "$JAR" -o "$BODY" -w '%{http_code}' -m 20 -X POST "${BASE}/login" \
-    -H 'Content-Type: application/json' -H "X-CSRF-Token: ${token}" \
+    "${PROTO_HEADER[@]}" -H 'Content-Type: application/json' -H "X-CSRF-Token: ${token}" \
     -d "{\"username\":\"admin\",\"password\":\"${pw}\"}")"
   CHECKS=$((CHECKS + 1))
   if [ "$code" = "302" ] || [ "$code" = "200" ]; then
@@ -95,13 +100,13 @@ login() { # one cookie jar, one CSRF token, exactly like the browser does
   fi
 }
 
-csrf() { curl -s -b "$JAR" -m 20 "${BASE}/dashboard" | sed -n 's/.*csrf-token" content="\([^"]*\)".*/\1/p' | head -1; }
+csrf() { curl -s -b "$JAR" -m 20 "${PROTO_HEADER[@]}" "${BASE}/dashboard" | sed -n 's/.*csrf-token" content="\([^"]*\)".*/\1/p' | head -1; }
 
 expect_api() { # expect_api <method> <path> [json]
   local method="$1" path="$2" data="${3:-}" token code
   token="$(csrf)"
   CHECKS=$((CHECKS + 1))
-  local -a c=(curl -s -b "$JAR" -o "$BODY" -w '%{http_code}' -m 25 -X "$method" "${BASE}${path}"
+  local -a c=(curl -s -b "$JAR" -o "$BODY" -w '%{http_code}' -m 25 -X "$method" "${PROTO_HEADER[@]}" "${BASE}${path}"
               -H 'Accept: application/json' -H "X-CSRF-Token: ${token}")
   if [ -n "$data" ]; then c+=(-H 'Content-Type: application/json' -d "$data"); fi
   code="$("${c[@]}")"
@@ -162,7 +167,7 @@ if [ -n "$PW" ]; then
   expect_api GET "/admin/api/v1/nodes"
   # harmless round-trip: writes the value it already has
   expect_api POST "/admin/api/v1/settings" '{"default_os":"ubuntu-24.04"}'
-  UID_="$(curl -s -b "$JAR" -H 'Accept: application/json' "${BASE}/api/v1/servers" \
+  UID_="$(curl -s -b "$JAR" "${PROTO_HEADER[@]}" -H 'Accept: application/json' "${BASE}/api/v1/servers" \
           | tr ',' '\n' | sed -n 's/.*"uid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)"
   if [ -n "$UID_" ]; then
     expect_status 200 "/servers/${UID_}"

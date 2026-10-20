@@ -164,6 +164,16 @@ def _register_hooks(app: Flask) -> None:
         if path.startswith("/static/") or path in ("/favicon.ico", "/healthz", "/metrics"):
             return None
 
+        # TLS enforcement for deployments behind an https-only proxy
+        # (Codespaces, rigbox, most PaaS). X-Forwarded-Proto is trusted because
+        # TRUSTED_PROXY_COUNT documents that a proxy sits in front.
+        if current_app.config.get("FORCE_HTTPS") and request.headers.get(
+            "X-Forwarded-Proto", request.scheme
+        ).split(",")[0].strip() != "https":
+            if request.path not in ("/readyz", "/version"):
+                target = request.url.replace("http://", "https://", 1)
+                return redirect(target, code=308)
+
         # Maintenance window (staff can still sign in)
         if settings.maintenance() and not path.startswith("/login") and not path.startswith("/api/v1/auth"):
             user = current_user()

@@ -19,7 +19,6 @@ concurrency:
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
-  PIP_NO_CACHE_DIR: "1"
 
 jobs:
   lint:
@@ -107,9 +106,11 @@ jobs:
           - name: codespaces
             expose: "1"
             url: https://skvm-demo-1a2b3c-8080.app.github.dev
+            proto: https
           - name: codesandbox
             expose: "0"
             url: https://abc12-8080.csb.app
+            proto: https
           - name: container image
             expose: "0"
             url: http://127.0.0.1:8080
@@ -117,6 +118,9 @@ jobs:
       MODE: ${{ matrix.mode.name }}
       EXPECT_URL: ${{ matrix.mode.url }}
       DO_EXPOSE: ${{ matrix.mode.expose }}
+      # Hosted previews terminate TLS, so the bootstrap marks the panel as
+      # https-only; the smoke run has to declare that proxy header too.
+      SMOKE_PROTO: ${{ matrix.mode.proto }}
       # The markers each hosted environment exports, so the same detection code
       # that runs in a Codespace is exercised here.
       CODESPACES: ${{ matrix.mode.name == 'codespaces' && 'true' || '' }}
@@ -211,6 +215,18 @@ jobs:
 
       - name: Compose file resolves
         run: docker compose -f docker-compose.yml config >/dev/null
+
+      - name: Image layout
+        run: |
+          set -uo pipefail
+          docker run --rm --entrypoint /bin/sh "skvm-ci:${{ matrix.variant }}" -c '
+            test -x /entrypoint.sh || { echo "entrypoint missing"; exit 1; }
+            test -x /app/autosetup.sh || { echo "autosetup not executable"; exit 1; }
+            test -x /opt/venv/bin/python || { echo "baked venv missing"; exit 1; }
+            /opt/venv/bin/python -c "import flask, docker, cryptography, psutil; print("deps ok")"
+            [ "${{ matrix.variant }}" = "docker" ] && docker --version || true
+            echo "image layout ok"
+          
 
       - name: Boot the container
         run: |
