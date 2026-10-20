@@ -16,7 +16,8 @@ from typing import Any
 import requests
 
 from ..db import db, iso, utcnow
-from ..models import AlertEvent, AlertRule, AlertState, Role, Server, Severity, User
+from ..models import (AlertEvent, AlertRule, AlertState, Role, Server, ServerStatus, Severity,
+                   User)
 from . import audit
 from .mailer import send_alert
 from .metrics import collect
@@ -76,7 +77,7 @@ def evaluate_rule(rule: AlertRule, servers: list[Server]) -> list[dict[str, Any]
     any_breach = False
     first_breach_server: Server | None = None
     for server in targets:
-        if server.status == Server.SUSPENDED.value and rule.metric != "offline":
+        if server.status == ServerStatus.SUSPENDED.value and rule.metric != "offline":
             continue
         stats = collect(server, cache_seconds=10)
         value = _value_for(rule, server, stats)
