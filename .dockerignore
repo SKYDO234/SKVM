@@ -1,0 +1,36 @@
+# Build context hygiene: the image copies the source, never the local state.
+.git
+.gitignore
+.github
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Local runtime state / secrets - the container keeps all of this in /data
+instance/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+*.crt
+
+# Editors, caches, docs-only assets
+.idea/
+.vscode/
+node_modules/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage/
+htmlcov/
+dist/
+build/
+.DS_Store
+*.swp

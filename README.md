@@ -1,5 +1,7 @@
 # SKVM
 
+[![CI](https://github.com/SKYDO234/SKVM/actions/workflows/ci.yml/badge.svg)](https://github.com/SKYDO234/SKVM/actions/workflows/ci.yml) [![image](https://img.shields.io/badge/ghcr.io-skvm-0db99d?logo=docker&logoColor=white)](https://github.com/SKYDO234/SKVM/pkgs/container/skvm) [![Open in Codespaces](https://img.shields.io/static/v1?label=Open+in+&message=Codespaces&color=0d66d6&logo=githubcodespaces)](https://codespaces.new/SKYDO234/SKVM)
+
 Sovereign VPS control plane — a glassmorphic, self-hosted panel for creating,
 observing and operating virtual servers (Docker containers or KVM guests on
 remote hypervisor nodes), with a web console, file manager, metrics, alerting,
@@ -45,11 +47,59 @@ bash autosetup.sh --fg --skip-apt --skip-install   # foreground (task runner)
 The preview host is derived from `CODESANDBOX_HOST` / `CSB_BASE_PREVIEW_HOST`, so
 cookies are marked secure and HTTPS is enforced automatically.
 
-### GitHub Codespaces / any devcontainer
+### GitHub Codespaces — for testing
 
-`onCreateCommand` runs `bash ./autosetup.sh --no-run`; attach and the panel
-starts, forwarding port 8080. On Codespaces the URL is built from
-`CODESPACE_NAME` + `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN`.
+[![Open in Codespaces](https://img.shields.io/static/v1?label=Open+in+&message=Codespaces&color=0d66d6&logo=githubcodespaces)](https://codespaces.new/SKYDO234/SKVM)
+
+Code → **Codespaces → Create codespace on main**. The dev container selects
+Python 3.11, `onCreateCommand` runs `bash ./autosetup.sh --no-run`, and the
+first start boots the panel in the background; the editor opens the
+**SKVM panel** preview on port 8080. The public URL, secure cookies and HTTPS
+enforcement are derived from `CODESPACE_NAME` +
+`GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN`, so nothing else to configure.
+
+This is a test box, and the panel treats it like one:
+
+* the forwarded port stays **private** (only you can reach it) until you opt in:
+  `bash autosetup.sh --expose` → `gh codespace ports visibility 8080:public`,
+  which also turns account registration off for that run;
+* state lives in `instance/` on the codespace volume — delete the codespace and
+  the database goes with it (`gh cs ssh`, then copy `instance/skvm.db` out, or
+  point `SKVM_INSTANCE_DIR` at a mounted disk when you need persistence);
+* the owner password is generated on first boot (`cat
+  instance/admin-credentials.txt`), or set `SKVM_ADMIN_PASSWORD` as a Codespaces
+  secret to choose it yourself;
+* `docker-outside-of-docker` is enabled, so a Codespace can provision **real**
+  containers (`--backend docker`) instead of the simulated fleet.
+
+Handy commands inside a Codespace:
+
+```bash
+bash autosetup.sh --status      # is it up?
+bash autosetup.sh --logs        # follow the server log
+bash autosetup.sh --restart     # bounce it (also re-applies .env)
+CI=1 bash .scripts/smoke.sh     # 40+ route checks: pages, login, API, assets
+```
+
+CI runs exactly that bootstrap on every push and pull request — bare Ubuntu, a
+simulated Codespace, a simulated CodeSandbox and a simulated container image —
+plus `bash -n`/shellcheck/ruff/`node --check` and a boot of both Docker images.
+It never deploys anything; publishing images is a separate, explicit workflow.
+
+### Container image (GitHub Packages)
+
+```bash
+docker run -p 8080:8080 -v skvm-data:/data ghcr.io/SKYDO234/skvm:latest
+docker compose up skvm                       # same thing, from this repo
+docker compose --profile docker up           # + docker CLI, host daemon mounted
+```
+
+`/entrypoint.sh` calls the same `autosetup.sh` (in container mode: no apt, no
+clone, baked-in `/opt/venv`), so the image and a raw sandbox cannot drift apart.
+`:latest` runs unprivileged against the simulated fleet or remote node agents;
+`:docker` mounts `/var/run/docker.sock` and is therefore root-equivalent — a
+lab host, not a shared box. The `.github/workflows/publish.yml` workflow builds
+both for `linux/amd64` + `arm64` on every `v*` tag and on `main`.
 
 ### Useful flags
 

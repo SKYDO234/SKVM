@@ -44,6 +44,20 @@ def _load_dotenv_if_present() -> None:
             return
 
 
+def _reaper_wanted(app: Flask) -> bool:
+    """Should this process run the sampling/alert worker in-process?
+
+    Evaluated when the app is built rather than at config-import time, so a
+    caller (``manage.py`` one-shot commands) can still switch it off.
+    """
+    if app.config.get("TESTING") or not app.config.get("REAPER_ENABLED", True):
+        return False
+    raw = os.environ.get("SKVM_REAPER")
+    if raw is not None and raw.strip().lower() in {"0", "false", "no", "off"}:
+        return False
+    return True
+
+
 def _resolve_config(config_object: str | object | None) -> type[BaseConfig]:
     if isinstance(config_object, type):
         return config_object
@@ -88,7 +102,7 @@ def create_app(config_object: str | object | None = None, **overrides: Any) -> F
 
         ensure_defaults(app)
 
-    if app.config.get("REAPER_ENABLED") and not app.config.get("TESTING"):
+    if _reaper_wanted(app):
         from .services.reaper import start_worker
 
         start_worker(app)

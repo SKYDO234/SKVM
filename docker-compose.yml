@@ -1,0 +1,67 @@
+# Two services, one image family:
+#   docker compose up skvm              unprivileged panel, simulated fleet
+#   docker compose --profile docker up  panel that drives the host's docker daemon
+#
+# All state (sqlite db, Fernet keys, backups, log) lives in the `skvm-data`
+# volume at /data - delete the container, keep the panel.
+name: skvm
+
+x-skvm-env: &skvm-env
+  # Anything SKVM_* is read by the app (see .env.example). autosetup.sh writes
+  # .env inside the container but real environment always wins, so these take
+  # precedence over whatever the volume already holds.
+  SKVM_PANEL_URL: ${SKVM_PANEL_URL:-http://localhost:8080}
+  SKVM_ADMIN_USERNAME: ${SKVM_ADMIN_USERNAME:-admin}
+  # Empty = autosetup generates one and writes it to /data/admin-credentials.txt
+  SKVM_ADMIN_PASSWORD: ${SKVM_ADMIN_PASSWORD:-}
+  SKVM_ALLOW_REGISTRATION: ${SKVM_ALLOW_REGISTRATION:-false}
+  SKVM_REAPER: "1"
+
+services:
+  skvm:
+    image: skvm:slim
+    build:
+      context: .
+      args:
+        VARIANT: slim
+    restart: unless-stopped
+    ports:
+      - "${SKVM_PORT:-8080}:8080"
+    environment:
+      <<: *skvm-env
+      SKVM_BACKEND: ${SKVM_BACKEND:-demo}
+    volumes:
+      - skvm-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+  skvm-docker:
+    image: skvm:docker
+    profiles: ["docker"]
+    build:
+      context: .
+      args:
+        VARIANT: docker
+    restart: unless-stopped
+    ports:
+      - "${SKVM_PORT:-8080}:8080"
+    environment:
+      <<: *skvm-env
+      SKVM_BACKEND: docker
+    volumes:
+      - skvm-data:/data
+      # The panel talks to the host daemon; container mounts are host paths.
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  skvm-data:

@@ -27,8 +27,17 @@ from skvm import __version__, create_app  # noqa: E402
 from skvm.config import BASE_DIR, INSTANCE_DIR  # noqa: E402
 
 
+# `create_app()` normally boots the sampling/alert worker in-process, which is what
+# a single-container deployment wants. One-shot commands must not duplicate that:
+# `serve`/`run` keep the in-process worker, `worker` runs its own loop, everything
+# else (init-db, seed, doctor, …) runs with it switched off.
+SERVE_COMMANDS = ("serve", "run")
+
+
 def build_app(args):
     env = args.env or os.environ.get("SKVM_ENV", "development" if args.command in ("run", "demo-data") else "production")
+    if args.command not in SERVE_COMMANDS:
+        os.environ["SKVM_REAPER"] = "0"
     return create_app(env)
 
 

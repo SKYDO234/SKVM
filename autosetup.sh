@@ -36,7 +36,7 @@ ADMIN_EMAIL="${SKVM_ADMIN_EMAIL:-}"
 APP_NAME="${SKVM_APP_NAME:-skvm}"
 IMAGE_DIR="${SKVM_IMAGE_DIR:-}"
 DO_CLONE=1 DO_APT=1 DO_INSTALL=1 DO_SEED=1 DO_DEMO=1 DO_RUN=1
-FOREGROUND=0 DO_EXPOSE=0 FORCE_INSTALL=0 QUIET=0
+FOREGROUND=0 DO_EXPOSE=0 FORCE_INSTALL=0 QUIET=0 FORCE_RESTART=0
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]:-$0}")" >/dev/null 2>&1 && pwd -P)"
 
@@ -84,9 +84,11 @@ Options
   --password PASS     Owner password          (default: generated, 0600 file)
   --email ADDR        Owner e-mail                (default: <user>@localhost)
   --app-name NAME     Route name for `rig app new`              (default: skvm)
-  --expose            Ask rigbox to publish a public route for the port
-  --no-expose         Never touch the rigbox router
-  --skip-apt          Do not install system packages
+  --expose            Publish the sandbox port: Codespaces via gh, rigbox as a
+                      https://<app>.rigbox.dev route. Registration is turned off
+                      automatically because the URL becomes world-readable.
+  --no-expose         Never touch the router (default)
+  --skip-apt          Do not install system packages (implied in containers)
   --skip-install      Reuse the existing virtualenv
   --reinstall         Recreate the virtualenv and rewrite .env
   --no-seed           Do not create/reset the owner account
@@ -98,6 +100,13 @@ Options
   --status            Report whether it is running
   --logs              Follow the server log
 
+Environment
+  SKVM_VENV           Path to a pre-built virtualenv (the image bakes /opt/venv)
+  SKVM_IN_CONTAINER=1 Force container mode: no apt, no clone, no pip install
+  SKVM_CONTAINER_APT=1 Opt back out of those container defaults
+  SKVM_ADMIN_PASSWORD On Codespaces/rigbox set it as a secret and it is used
+                      instead of generating one (otherwise: instance/admin-credentials.txt)
+
 Examples
   # cold sandbox -> live panel, backgrounded, public route on rigbox
   bash autosetup.sh --expose
@@ -107,6 +116,13 @@ Examples
 
   # after a snapshot restore / config change
   bash autosetup.sh --restart
+
+  # GitHub Codespaces: everything but launching, then share the port for a demo
+  bash autosetup.sh --no-run
+  bash autosetup.sh --skip-apt --skip-install --expose
+
+  # inside the published image (deps are baked in, /data holds the state)
+  docker run -p 8080:8080 -v skvm-data:/data ghcr.io/OWNER/skvm:latest
 SKVM_HELP
 }
 
@@ -177,12 +193,35 @@ detect_platform() {
   if command -v rig >/dev/null 2>&1 && rig whoami >/dev/null 2>&1; then
     printf 'rigbox'; return 0
   fi
+  if [ "${GITHUB_ACTIONS:-}" = "true" ] || [ -n "${RUNNER_NAME:-}" ]; then
+    printf 'actions'; return 0
+  fi
   if [ -f /.dockerenv ] || grep -qs 'docker\|kubepods\|container' /proc/1/cgroup; then
     printf 'container'; return 0
   fi
   printf 'generic'
 }
 PLATFORM="$(detect_platform)"
+
+# Container images bake the dependencies in and can mount a read-only app dir;
+# in that case the bootstrap only configures and launches.
+CONTAINER=0
+if [ "$PLATFORM" = "container" ] || [ "${SKVM_IN_CONTAINER:-0}" = "1" ]; then
+  CONTAINER=1
+fi
+
+if [ "$CONTAINER" = 1 ]; then
+  DO_APT=0; DO_CLONE=0; DO_INSTALL=0
+  if [ "$FORCE_INSTALL" = 1 ]; then
+    FORCE_INSTALL=0
+    warn "--reinstall is ignored inside the image - the dependencies are baked in (SKVM_CONTAINER_APT=1 opts out of all container defaults)"
+  fi
+  if [ "${SKVM_CONTAINER_APT:-0}" = "1" ]; then
+    DO_APT=1; DO_CLONE=1; DO_INSTALL=1
+    note "SKVM_CONTAINER_APT=1 - treating this container like a plain box (apt + pip allowed)"
+  fi
+fi
+
 
 # --------------------------------------------------------- locate / clone ##
 REPO_DIR=""
@@ -216,7 +255,7 @@ cd "$REPO_DIR"
 INSTANCE_DIR="${INSTANCE_DIR:-$REPO_DIR/instance}"
 mkdir -p "$INSTANCE_DIR" 2>/dev/null || true
 chmod 700 "$INSTANCE_DIR" 2>/dev/null || true
-VENV="$INSTANCE_DIR/venv"
+VENV="${SKVM_VENV:-$INSTANCE_DIR/venv}"
 # One pid file per port so two panels sharing a state directory never fight
 # over the same process; the log stays shared because it is easier to tail.
 PID_FILE="$INSTANCE_DIR/skvm-${PORT}.pid"
@@ -224,7 +263,10 @@ LOG_FILE="$INSTANCE_DIR/skvm.log"
 CRED_FILE="$INSTANCE_DIR/admin-credentials.txt"
 ENV_FILE="$REPO_DIR/.env"
 
-export SKVM_ENV="$ENV_NAME" SKVM_BACKEND="$BACKEND" SKVM_INSTANCE_DIR="$INSTANCE_DIR"
+# The one-shot manage.py calls below must not start the background worker
+# (it would evaluate alerts while the schema is still being created); the
+# server itself re-enables it right before launch.
+export SKVM_ENV="$ENV_NAME" SKVM_BACKEND="$BACKEND" SKVM_INSTANCE_DIR="$INSTANCE_DIR" SKVM_REAPER=0
 if [ -n "$IMAGE_DIR" ]; then export SKVM_IMAGE_DIR="$IMAGE_DIR"; fi
 
 # -------------------------------------------------- lifecycle shortcuts ----
@@ -240,7 +282,7 @@ read_pid() {
 case "$ACTION" in
   restart)
     # cheap re-apply, then a fresh process (installs are already done)
-    DO_APT=0 DO_INSTALL=0 DO_SEED=0 DO_DEMO=0 ACTION="setup"
+    DO_APT=0 DO_INSTALL=0 DO_SEED=0 DO_DEMO=0 ACTION="setup" FORCE_RESTART=1
     ;;
   stop)
     if pid="$(read_pid)"; then
@@ -416,6 +458,12 @@ esac
 SECURE_COOKIES=0
 case "$PUBLIC_URL" in https://*) SECURE_COOKIES=1 ;; esac
 
+# A URL that anyone can reach is a testing box: do not let strangers sign up.
+if [ "$DO_EXPOSE" = 1 ] && [ -z "${SKVM_ALLOW_REGISTRATION:-}" ]; then
+  SKVM_ALLOW_REGISTRATION="false"; export SKVM_ALLOW_REGISTRATION
+  note "public exposure requested - account registration is disabled (SKVM_ALLOW_REGISTRATION=false)"
+fi
+
 write_env() {
   local tmp key skip managed line m
   tmp="$(mktemp "${INSTANCE_DIR}/.env.XXXXXX")"
@@ -521,22 +569,54 @@ if [ "$DO_DEMO" = 1 ]; then
 fi
 
 # ---------------------------------------------------------- helpers: run ---
+# --expose makes the panel reachable from outside the sandbox. Both supported
+# hosts keep ports private by default, so this is a deliberate, reversible step.
 expose_route() {
   if [ "$DO_EXPOSE" != 1 ]; then return 0; fi
-  if [ "$PLATFORM" != "rigbox" ]; then
-    note "--expose only applies to rigbox workspaces (found: ${PLATFORM})"
-    return 0
-  fi
-  if ! command -v rig >/dev/null 2>&1; then
-    warn "no rig CLI on PATH - publish it yourself: rig app new --name ${APP_NAME} --port ${PORT}"
-    return 0
-  fi
-  step "Publishing a rigbox route"
-  if rig app new --name "$APP_NAME" --port "$PORT" >/dev/null 2>&1; then
-    ok "https://${APP_NAME}.rigbox.dev -> port ${PORT}"
-  else
-    warn "route not created - retry with: rig app expose-port --port ${PORT} --name ${APP_NAME} --wrap"
-  fi
+  case "$PLATFORM" in
+    codespaces)
+      local cs="${CODESPACE_NAME:-}"
+      if [ -z "$cs" ] && [ -n "${CODESPACE_VSCODE_FOLDER:-}" ]; then
+        cs="$(printf '%s' "${CODESPACE_VSCODE_FOLDER#/workspaces/}" | cut -d/ -f1)"
+      fi
+      if ! command -v gh >/dev/null 2>&1; then
+        warn "no gh CLI - share it yourself: gh codespace ports visibility ${PORT}:public -c ${cs:-<codespace-name>}"
+        return 0
+      fi
+      step "Publishing the Codespace port"
+      if [ -z "$cs" ]; then
+        warn "CODESPACE_NAME is unset - set the port to Public in the Ports tab instead"
+        return 0
+      fi
+      if gh codespace ports visibility "${PORT}:public" -c "$cs" >/dev/null 2>&1; then
+        ok "port ${PORT} is public · ${PUBLIC_URL}"
+        warn "anyone with that URL can reach the panel - revert with: gh codespace ports visibility ${PORT}:private -c $cs"
+      else
+        warn "could not change port visibility (gh needs the codespace scope) - use the Ports tab: forward ${PORT} as Public"
+      fi
+      ;;
+    rigbox)
+      if ! command -v rig >/dev/null 2>&1; then
+        warn "no rig CLI on PATH - publish it yourself: rig app new --name ${APP_NAME} --port ${PORT}"
+        return 0
+      fi
+      step "Publishing a rigbox route"
+      if rig app new --name "$APP_NAME" --port "$PORT" >/dev/null 2>&1; then
+        ok "https://${APP_NAME}.rigbox.dev -> port ${PORT}"
+      else
+        warn "route not created - retry with: rig app expose-port --port ${PORT} --name ${APP_NAME} --wrap"
+      fi
+      ;;
+    actions)
+      note "--expose does nothing in CI - the runner is not reachable from outside"
+      ;;
+    codesandbox)
+      note "CodeSandbox already maps every opened port to a preview URL - ${PUBLIC_URL}"
+      ;;
+    *)
+      note "--expose knows rigbox and Codespaces (found: ${PLATFORM}) - route ${PUBLIC_URL} yourself"
+      ;;
+  esac
   return 0
 }
 
@@ -544,8 +624,10 @@ wait_ready() {
   local tries="$1" i=0
   if ! command -v curl >/dev/null 2>&1; then sleep 4; return 0; fi
   while [ "$i" -lt "$tries" ]; do
-    if curl -fsS -m 2 "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then return 0; fi
+    # Liveness first: a server that died on a busy port must not be masked by a
+    # stale instance that is still answering on the same socket.
     if [ -n "${SERVER_PID:-}" ] && ! kill -0 "$SERVER_PID" 2>/dev/null; then return 1; fi
+    if curl -fsS -m 2 "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then return 0; fi
     i=$((i + 1))
     sleep 1
   done
@@ -575,6 +657,16 @@ report() {
   printf '  provision a VPS:  %s/servers/new\n' "$PUBLIC_URL"
   printf '  restart:          bash autosetup.sh --restart\n'
   printf '  follow the log:   bash autosetup.sh --logs\n'
+  case "$PLATFORM" in
+    codespaces)
+      printf '\n  %bThis codespace is a test box: the port stays private until you publish it:%b\n' "$C_DIM" "$C_OFF"
+      printf '    gh codespace ports visibility %s:public -c %s\n' "$PORT" "${CODESPACE_NAME:-<codespace-name>}"
+      printf '  %bState lives on the codespace volume - delete the codespace and it is gone.%b\n' "$C_DIM" "$C_OFF"
+      ;;
+    container)
+      printf '\n  %bPersist the database by mounting a volume on %s (or SKVM_INSTANCE_DIR).%b\n' "$C_DIM" "$INSTANCE_DIR" "$C_OFF"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------- launch ---
@@ -598,7 +690,17 @@ if [ "$FOREGROUND" = 1 ]; then
 fi
 
 step "Starting the panel"
-if pid="$(read_pid)"; then
+pid="$(read_pid || true)"
+if [ -n "$pid" ] && [ "$FORCE_RESTART" != 1 ] \
+   && command -v curl >/dev/null 2>&1 \
+   && curl -fsS -m 3 "http://127.0.0.1:${PORT}/healthz" >/dev/null 2>&1; then
+  SERVER_PID="$pid"
+  ok "already serving on ${HOST}:${PORT} (pid $pid) · bounce it with: bash autosetup.sh --restart"
+  expose_route
+  report
+  exit 0
+fi
+if [ -n "$pid" ]; then
   note "restarting the existing server (pid $pid)"
   kill "$pid" 2>/dev/null || true
   sleep 1
