@@ -29,7 +29,29 @@ PROTO_HEADER=()
 if [ -n "${SMOKE_PROTO:-}" ]; then PROTO_HEADER=(-H "X-Forwarded-Proto: ${SMOKE_PROTO}"); fi
 
 say() { printf '%s\n' "$*"; }
-bad() { printf '  !! %s\n' "$*" >&2; FAILURES=$((FAILURES + 1)); }
+
+# On GitHub Actions every failure also becomes an annotation: the log itself is
+# not readable through the API, the annotations are. Keep each one on a line.
+emit() {
+  printf '  !! %s\n' "$1" >&2
+  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    printf '::error::%s\n' "$(printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-480)"
+  fi
+  FAILURES=$((FAILURES + 1))
+}
+
+notice() {
+  if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    printf '::notice::%s\n' "$(printf '%s' "$*" | tr '\n\r' '  ' | cut -c1-480)"
+  fi
+}
+
+bad() { emit "$*"; }
+
+# A status code alone rarely explains anything, so include the response head.
+brief_body() {
+  sed -e 's/<[^>]*>//g' -e 's/[[:space:]][[:space:]]*/ /g' "$BODY" 2>/dev/null | tr -d '\n' | cut -c1-160
+}
 
 start_if_needed() {
   if curl -fsS -m 2 "${BASE}/healthz" >/dev/null 2>&1; then
@@ -62,8 +84,7 @@ expect_status() { # expect_status <wanted> <path> [accept]
   if [ "$code" = "$wanted" ]; then
     printf '  ok   %-46s %s\n' "$path" "$code"
   else
-    printf '  !!   %-46s %s (wanted %s)\n' "$path" "$code" "$wanted" >&2
-    FAILURES=$((FAILURES + 1))
+    emit "GET $path -> $code (wanted $wanted) :: $(brief_body)"
   fi
 }
 
@@ -74,8 +95,7 @@ expect_contains() { # expect_contains <needle> <path> [accept]
   if grep -qF -- "$needle" "$BODY"; then
     printf '  ok   %-46s contains %s\n' "$path" "$needle"
   else
-    printf '  !!   %-46s missing %s\n' "$path" "$needle" >&2
-    FAILURES=$((FAILURES + 1))
+    emit "$path is missing '$needle' :: $(brief_body)"
   fi
 }
 
@@ -94,8 +114,7 @@ login() { # one cookie jar, one CSRF token, exactly like the browser does
   if [ "$code" = "302" ] || [ "$code" = "200" ]; then
     say "  ok   logged in as admin"
   else
-    printf '  !!   login failed (%s)\n' "$code" >&2
-    FAILURES=$((FAILURES + 1))
+    emit "login failed ($code) :: $(brief_body)"
     return 1
   fi
 }
@@ -113,8 +132,7 @@ expect_api() { # expect_api <method> <path> [json]
   if [ "$code" = "200" ]; then
     printf '  ok   %-46s api %s\n' "$path" "$method"
   else
-    printf '  !!   %-46s api %s -> %s\n' "$path" "$method" "$code" >&2
-    FAILURES=$((FAILURES + 1))
+    emit "api $method $path -> $code :: $(brief_body)"
   fi
 }
 
@@ -186,6 +204,8 @@ if [ "${CI:-0}" = "1" ] && [ "$STARTED_BY_US" = 1 ]; then
 fi
 
 say ""
+notice "smoke: ${CHECKS} checks, ${FAILURES} failed · pid $(cat "instance/skvm-${PORT}.pid" 2>/dev/null || echo none) · healthz $(curl -s -o /dev/null -w '%{http_code}' -m 3 "${BASE}/healthz" 2>/dev/null || echo unreachable)"
+
 if [ "$FAILURES" -eq 0 ]; then
   printf '\n\033[1mSKVM smoke: %s checks, all green\033[0m\n' "$CHECKS"
   exit 0
