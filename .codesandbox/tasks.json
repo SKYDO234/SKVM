@@ -1,0 +1,30 @@
+{
+  "setupTasks": [
+    {
+      "name": "SKVM autosetup",
+      "command": "bash ./autosetup.sh --no-run --port 8080"
+    }
+  ],
+  "tasks": {
+    "skvm": {
+      "name": "SKVM panel",
+      "command": "bash ./autosetup.sh --fg --port 8080 --skip-apt --skip-install",
+      "preview": {
+        "port": 8080
+      },
+      "runAtStart": true
+    },
+    "logs": {
+      "name": "SKVM logs",
+      "command": "tail -n 200 -f instance/skvm.log"
+    },
+    "doctor": {
+      "name": "SKVM doctor",
+      "command": "./instance/venv/bin/python manage.py doctor"
+    },
+    "reset": {
+      "name": "SKVM reset (wipe sandbox state)",
+      "command": "bash ./autosetup.sh --stop; rm -rf instance .env; echo 'now run the autosetup setup task again'"
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "SKVM panel",
+  "comment": "Works on GitHub Codespaces and CodeSandbox VM sandboxes. autosetup.sh does the rest; every opened port is mapped to a public URL automatically by CodeSandbox, Codespaces forwards the ones listed below.",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+  "onCreateCommand": "bash ./autosetup.sh --no-run",
+  "updateContentCommand": "bash ./autosetup.sh --no-run --skip-apt",
+  "postAttachCommand": "bash ./autosetup.sh --status || bash ./autosetup.sh --skip-apt --skip-install",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "SKVM panel",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "kevinrose.vsc-python-indent"],
+      "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/instance/venv/bin/python",
+        "files.exclude": { "instance/": true }
+      }
+    }
+  }
+}

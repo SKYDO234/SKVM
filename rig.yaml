@@ -1,0 +1,71 @@
+# SKVM on rigbox.dev — `rig deploy` from a fresh clone.
+#
+# `install:` builds the venv and provisions the database inside the builder VM,
+# `start:` boots the panel on port 8080 and rigbox publishes it at
+# https://<app>.rigbox.dev.  Runtime state lives on a volume so re-deploys keep
+# users, servers, snapshots and metrics history.
+#
+#   rig login && rig deploy --name skvm
+#
+# Ad-hoc setup inside an already-running workspace is one command:
+#   bash autosetup.sh --expose
+name: skvm
+port: 8080
+visibility: private
+
+workspace:
+  resources: { ramMb: 2048, vcpuCount: 2, diskSizeMb: 12288 }
+  deployment:
+    strategy: incremental
+  volumes:
+    - name: data
+      mountPath: /home/developer/data
+      sizeMb: 5120
+
+env:
+  SKVM_ENV: production
+  SKVM_PANEL_NAME: SKVM
+
+install: |
+  python3 -m venv --copies .venv
+  .venv/bin/python -m pip install --quiet --upgrade pip
+  .venv/bin/python -m pip install --quiet -r requirements.txt
+
+start: |
+  # Reuse the venv that ships with this release; autosetup owns .env, the
+  # schema, the owner account and the foreground server process.
+  export SKVM_INSTANCE_DIR="${SKVM_INSTANCE_DIR:-/home/developer/data/skvm}"
+  mkdir -p "$SKVM_INSTANCE_DIR"
+  ln -sfn "$PWD/.venv" "$SKVM_INSTANCE_DIR/venv"
+  bash autosetup.sh --no-clone --skip-apt --skip-install --port 8080 --fg
+
+health:
+  path: /healthz
+  timeoutSeconds: 90
+
+params:
+  - key: backend
+    type: select
+    label: Hypervisor driver
+    description: auto uses docker when the workspace has a daemon, otherwise the simulated fleet.
+    group: Runtime
+    default: auto
+    envVar: SKVM_BACKEND
+    options:
+      - { value: auto, label: "Auto (docker if present, else demo)" }
+      - { value: docker, label: "Docker (real containers)" }
+      - { value: demo, label: "Demo (simulated)" }
+  - key: allow_registration
+    type: boolean
+    label: Let visitors create accounts
+    group: Access
+    default: false
+    envVar: SKVM_ALLOW_REGISTRATION
+
+secrets:
+  - name: SKVM_SECRET_KEY
+  - name: SKVM_ENCRYPTION_KEY
+
+dependencyInputs:
+  - requirements.txt
+  - autosetup.sh
