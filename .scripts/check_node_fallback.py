@@ -32,6 +32,9 @@ def main() -> int:
     # provisioning. The driver is swapped below, after the rows exist.
     os.environ["SKVM_BACKEND"] = "demo"
     os.environ["SKVM_ENV"] = "testing"
+    # The test client talks plain http to itself; a hosted box sets this in .env
+    # and would answer every request with a 308 instead of a page.
+    os.environ["SKVM_FORCE_HTTPS"] = "0"
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
     from skvm.app import create_app

@@ -131,25 +131,23 @@ jobs:
 
       - name: Bring the panel up, smoke test it, exercise the lifecycle
         run: |
+          # Actions runs 'run:' with bash -e -o pipefail, so every probe below has
+          # to be an 'if' and not a bare command: a non-zero exit is the normal
+          # answer from --status when nothing is running.
           set -uo pipefail
           flags=(--port 8080)
           if [ "$DO_EXPOSE" = "1" ]; then flags+=(--expose); fi
           if [ "$MODE" = "container image" ]; then flags+=(--skip-apt --skip-install); fi
           echo "\$ bash autosetup.sh ${flags[*]}"
-          bash autosetup.sh "${flags[@]}" 2>&1 | tee /tmp/setup.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" != "0" ]; then
-            echo "::error::autosetup.sh exited $status"
+          if ! bash autosetup.sh "${flags[@]}" 2>&1 | tee /tmp/setup.log; then
+            echo "::error::autosetup.sh failed"
             tail -n 30 /tmp/setup.log
             exit 1
           fi
 
-          if [ -n "${EXPECT_URL:-}" ]; then
-            if ! grep -q "SKVM_PANEL_URL=${EXPECT_URL}" .env; then
-              echo "::error::expected SKVM_PANEL_URL=${EXPECT_URL} in .env, got $(grep SKVM_PANEL_URL .env || echo nothing)"
-              exit 1
-            fi
-            echo "public url ok: ${EXPECT_URL}"
+          if [ -n "${EXPECT_URL:-}" ] && ! grep -q "SKVM_PANEL_URL=${EXPECT_URL}" .env; then
+            echo "::error::expected SKVM_PANEL_URL=${EXPECT_URL} in .env, got $(grep SKVM_PANEL_URL .env || echo nothing)"
+            exit 1
           fi
           if [ "$MODE" = "container image" ]; then
             if grep -qi "Installing system packages" /tmp/setup.log; then
@@ -161,29 +159,37 @@ jobs:
           fi
 
           venv="${SKVM_VENV:-$GITHUB_WORKSPACE/instance/venv}"
-          "$venv/bin/python" manage.py doctor
+          if ! "$venv/bin/python" manage.py doctor; then
+            echo "::error::doctor reported a problem"
+            exit 1
+          fi
 
           # A node whose agent secret is missing must degrade, not 500. Cheap to
           # prove on any runner, and it is the state a hosted box lands in.
-          "$venv/bin/python" .scripts/check_node_fallback.py
+          if ! "$venv/bin/python" .scripts/check_node_fallback.py; then
+            echo "::error::an unusable node took a page down (see check_node_fallback.py above)"
+            exit 1
+          fi
 
           # One step on purpose: a panel started in an earlier step is not
           # guaranteed to survive to the next one.
-          CI=1 bash .scripts/smoke.sh 8080
-          status=$?
-          if [ "$status" != "0" ]; then
-            echo "::error::smoke failed ($status); panel log follows"
+          if ! CI=1 bash .scripts/smoke.sh 8080; then
+            echo "::error::smoke failed; panel log follows"
             tail -n 40 instance/skvm.log 2>/dev/null || true
-            exit "$status"
+            exit 1
           fi
 
-          # Lifecycle: a rerun finds it stopped, a start brings it back, and
-          # --status agrees with the health endpoint either way.
-          bash autosetup.sh --status --port 8080
-          bash autosetup.sh --port 8080 --skip-apt --skip-install >/dev/null 2>&1
-          bash autosetup.sh --status --port 8080 | grep -q "running" || {
-            echo "::error::the panel did not come back up on a second run"; exit 1; }
-          curl -fsS http://127.0.0.1:8080/healthz >/dev/null || { echo "::error::/healthz after restart"; exit 1; }
+          # Lifecycle: smoke stopped it, a rerun brings it back, --status agrees.
+          bash autosetup.sh --status --port 8080 || true
+          if ! bash autosetup.sh --port 8080 --skip-apt --skip-install >/dev/null 2>&1; then
+            echo "::error::a second autosetup run could not start the panel"; exit 1
+          fi
+          if ! bash autosetup.sh --status --port 8080 | grep -q "running"; then
+            echo "::error::the panel did not come back up on a second run"; exit 1
+          fi
+          if ! curl -fsS http://127.0.0.1:8080/healthz >/dev/null; then
+            echo "::error::/healthz did not answer after the restart"; exit 1
+          fi
 
       - name: Upload the server log
         if: failure()
