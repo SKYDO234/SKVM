@@ -591,6 +591,9 @@ fi
 if [ "$FOREGROUND" = 1 ]; then
   expose_route
   say "  ${C_DIM}serving on ${HOST}:${PORT} in the foreground - Ctrl+C stops it${C_OFF}"
+  # exec() keeps our pid, so record it - that lets `--status` see a panel that
+  # a task runner supervises in the foreground.
+  echo $$ > "$PID_FILE" 2>/dev/null || true
   exec "$VPY" "${SERVE_ARGS[@]}"
 fi
 
