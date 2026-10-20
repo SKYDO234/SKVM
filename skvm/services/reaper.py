@@ -19,6 +19,7 @@ from datetime import timedelta
 from typing import Any
 
 from ..backends import BackendError, get_backend
+from ..nodeclient import NodeError
 from ..db import db, utcnow
 from ..models import (
     ApiToken,
@@ -182,12 +183,15 @@ class Worker:
         for node in nodes:
             from ..backends.node_backend import NodeBackend
 
-            backend = NodeBackend(node)
             try:
+                # Construction itself can fail (missing/rotated agent secret) - one
+                # unreachable node must never abort the rest of the worker cycle.
+                backend = NodeBackend(node)
                 data = backend.client.health()
-            except BackendError as exc:
+            except (BackendError, NodeError) as exc:
                 node.status = "offline"
                 node.last_error = str(exc)[:250]
+                db.session.commit()
                 continue
             node.status = "online"
             node.last_error = ""

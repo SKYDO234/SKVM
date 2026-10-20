@@ -496,7 +496,11 @@ def node_test(node_id: int):
         return fail("Node not found", 404)
     from ..backends.node_backend import NodeBackend
 
-    backend = NodeBackend(node)
+    try:
+        backend = NodeBackend(node)
+    except Exception as exc:  # missing or rotated agent secret
+        return ok(online=False, detail=str(exc)[:250], node=node.public(),
+                  message="This node has no usable agent secret")
     online, detail = backend.ping()
     node.status = "online" if online else "offline"
     node.last_error = "" if online else detail[:250]
