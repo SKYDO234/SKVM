@@ -27,7 +27,8 @@ from typing import Any, Callable
 
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken
-from flask import current_app, flash, g, jsonify, redirect, request, session as flask_session, url_for
+from flask import (current_app, flash, g, has_request_context, jsonify, redirect, request,
+                   session as flask_session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import iso, utcnow
@@ -291,6 +292,10 @@ def current_user() -> User | None:
     """Resolve the session cookie to a live :class:`User` (cached on ``g``)."""
     if "_skvm_user" in g:
         return g._skvm_user
+    if not has_request_context():
+        # Background worker (mail, alert fan-out) renders templates too - there
+        # is no session to read there, and touching it would raise.
+        return None
     from .db import db
 
     user: User | None = None
