@@ -61,29 +61,11 @@ jobs:
             node --check "$f"
           done
 
-      - name: Config files parse
+      - name: Config and workflow syntax
         run: |
           set -euo pipefail
           pip install --quiet pyyaml
-          python - <<'PY'
-          import json, pathlib
-          import yaml
-
-          for path in sorted(pathlib.Path(".").rglob("*.json")):
-              if ".git" in path.parts or "node_modules" in path.parts:
-                  continue
-              json.loads(path.read_text())
-              print("json ok:", path)
-
-          for name in ("rig.yaml", "docker-compose.yml"):
-              yaml.safe_load(pathlib.Path(name).read_text())
-              print("yaml ok:", name)
-
-          for wf in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
-              doc = yaml.safe_load(wf.read_text())
-              assert doc.get("jobs"), wf
-              print("workflow ok:", wf)
-          PY
+          python .scripts/check_workflows.py --shellcheck
 
       - name: Dockerfile hygiene
         continue-on-error: true
@@ -147,7 +129,7 @@ jobs:
           "$GITHUB_WORKSPACE/.venv/bin/pip" install -q -r requirements.txt
           echo "SKVM_VENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
 
-      - name: Bring the panel up
+      - name: Bring the panel up, smoke test it, exercise the lifecycle
         run: |
           set -uo pipefail
           flags=(--port 8080)
@@ -155,31 +137,49 @@ jobs:
           if [ "$MODE" = "container image" ]; then flags+=(--skip-apt --skip-install); fi
           echo "\$ bash autosetup.sh ${flags[*]}"
           bash autosetup.sh "${flags[@]}" 2>&1 | tee /tmp/setup.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" != "0" ]; then
+            echo "::error::autosetup.sh exited $status"
+            tail -n 30 /tmp/setup.log
+            exit 1
+          fi
+
           if [ -n "${EXPECT_URL:-}" ]; then
             if ! grep -q "SKVM_PANEL_URL=${EXPECT_URL}" .env; then
-              echo "expected SKVM_PANEL_URL=${EXPECT_URL} in .env:"
-              grep SKVM_PANEL_URL .env
+              echo "::error::expected SKVM_PANEL_URL=${EXPECT_URL} in .env, got $(grep SKVM_PANEL_URL .env || echo nothing)"
               exit 1
             fi
             echo "public url ok: ${EXPECT_URL}"
           fi
           if [ "$MODE" = "container image" ]; then
             if grep -qi "Installing system packages" /tmp/setup.log; then
-              echo "container mode must not run apt"; exit 1
+              echo "::error::container mode ran apt"; exit 1
             fi
             if ! grep -q "dependencies already present" /tmp/setup.log; then
-              echo "container mode should reuse the baked venv"; exit 1
+              echo "::error::container mode did not reuse the baked venv"; exit 1
             fi
           fi
 
-      - name: Doctor
-        run: |
-          set -euo pipefail
           venv="${SKVM_VENV:-$GITHUB_WORKSPACE/instance/venv}"
           "$venv/bin/python" manage.py doctor
 
-      - name: Smoke test every route the UI uses
-        run: CI=1 bash .scripts/smoke.sh 8080
+          # One step on purpose: a panel started in an earlier step is not
+          # guaranteed to survive to the next one.
+          CI=1 bash .scripts/smoke.sh 8080
+          status=$?
+          if [ "$status" != "0" ]; then
+            echo "::error::smoke failed ($status); panel log follows"
+            tail -n 40 instance/skvm.log 2>/dev/null || true
+            exit "$status"
+          fi
+
+          # Lifecycle: a rerun finds it stopped, a start brings it back, and
+          # --status agrees with the health endpoint either way.
+          bash autosetup.sh --status --port 8080
+          bash autosetup.sh --port 8080 --skip-apt --skip-install >/dev/null 2>&1
+          bash autosetup.sh --status --port 8080 | grep -q "running" || {
+            echo "::error::the panel did not come back up on a second run"; exit 1; }
+          curl -fsS http://127.0.0.1:8080/healthz >/dev/null || { echo "::error::/healthz after restart"; exit 1; }
 
       - name: Upload the server log
         if: failure()
@@ -223,10 +223,10 @@ jobs:
             test -x /entrypoint.sh || { echo "entrypoint missing"; exit 1; }
             test -x /app/autosetup.sh || { echo "autosetup not executable"; exit 1; }
             test -x /opt/venv/bin/python || { echo "baked venv missing"; exit 1; }
-            /opt/venv/bin/python -c "import flask, docker, cryptography, psutil; print("deps ok")"
+            /opt/venv/bin/python -c "import flask, docker, cryptography, psutil" && echo deps-ok
             [ "${{ matrix.variant }}" = "docker" ] && docker --version || true
             echo "image layout ok"
-          
+          '
 
       - name: Boot the container
         run: |
