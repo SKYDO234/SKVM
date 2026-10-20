@@ -36,6 +36,7 @@ emit() {
   printf '  !! %s\n' "$1" >&2
   if [ "${GITHUB_ACTIONS:-}" = "true" ]; then
     printf '::error::%s\n' "$(printf '%s' "$1" | tr '\n\r' '  ' | cut -c1-480)"
+    why
   fi
   FAILURES=$((FAILURES + 1))
 }
@@ -53,6 +54,7 @@ bad() { emit "$*"; }
 report_traceback() {
   local log=instance/skvm.log n
   [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
+  [ "${WHY_SHOWN:-0}" = "0" ] || return 0
   if [ ! -f "$log" ]; then
     notice "smoke: no $log to explain the failures with"
     return 0
@@ -67,6 +69,30 @@ report_traceback() {
   notice "smoke: exception $(tail -n "+$n" "$log" | awk 'NR > 1 && !/^[[:space:]]/ {print; exit}' | cut -c1-400)"
 }
 
+
+# Line count of the panel log, so a failure can be pointed at whatever the
+# server wrote to its log *while answering that one request*.
+MARK=0
+WHY_SHOWN=0
+log_mark() { wc -l < instance/skvm.log 2>/dev/null | tr -d '[:space:]' || printf 0; }
+
+# One annotation per failure: the frames and the exception line, not the dump.
+why() {
+  local log=instance/skvm.log n block frames exc
+  [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
+  [ -f "$log" ] || return 0
+  [ "${MARK:-0}" != "0" ] || return 0
+  n="$(tail -n "+$((MARK + 1))" "$log" | grep -n 'Traceback (most recent call last)' | tail -1 | cut -d: -f1)"
+  [ -n "$n" ] || return 0
+  block="$(tail -n "+$((MARK + n))" "$log")"
+  # ".../skvm/routes/admin.py", line 401, in nodes  ->  skvm/routes/admin.py:401 nodes
+  frames="$(printf '%s\n' "$block" | grep 'File "' | tail -3 \
+            | sed -E -e 's#.*"(.*/)?(skvm/[^"]*)", line ([0-9]+), in .*#\2:\3#' \
+                      -e 's#.*"([^"]*)", line ([0-9]+), in ([^ ]*).*#\1:\2 \3#' | tr -s '\n' ' ')"
+  exc="$(printf '%s\n' "$block" | awk 'NR > 1 && !/^[[:space:]]/ {print; exit}')"
+  notice "smoke:   raised by ${frames} => ${exc}"
+  WHY_SHOWN=$((WHY_SHOWN + 1))
+}
 
 # A status code alone rarely explains anything, so include the response head.
 brief_body() {
@@ -100,6 +126,7 @@ start_if_needed() {
 expect_status() { # expect_status <wanted> <path> [accept]
   local wanted="$1" path="$2" accept="${3:-text/html}" code
   CHECKS=$((CHECKS + 1))
+  MARK="$(log_mark)"
   code="$(curl -s -o "$BODY" -w '%{http_code}' -m 25 -b "$JAR" "${PROTO_HEADER[@]}" -H "Accept: ${accept}" "${BASE}${path}")"
   if [ "$code" = "$wanted" ]; then
     printf '  ok   %-46s %s\n' "$path" "$code"
@@ -111,6 +138,7 @@ expect_status() { # expect_status <wanted> <path> [accept]
 expect_contains() { # expect_contains <needle> <path> [accept]
   local needle="$1" path="$2" accept="${3:-text/html}"
   CHECKS=$((CHECKS + 1))
+  MARK="$(log_mark)"
   curl -s -o "$BODY" -m 25 -b "$JAR" "${PROTO_HEADER[@]}" -H "Accept: ${accept}" "${BASE}${path}"
   if grep -qF -- "$needle" "$BODY"; then
     printf '  ok   %-46s contains %s\n' "$path" "$needle"
@@ -145,6 +173,7 @@ expect_api() { # expect_api <method> <path> [json]
   local method="$1" path="$2" data="${3:-}" token code
   token="$(csrf)"
   CHECKS=$((CHECKS + 1))
+  MARK="$(log_mark)"
   local -a c=(curl -s -b "$JAR" -o "$BODY" -w '%{http_code}' -m 25 -X "$method" "${PROTO_HEADER[@]}" "${BASE}${path}"
               -H 'Accept: application/json' -H "X-CSRF-Token: ${token}")
   if [ -n "$data" ]; then c+=(-H 'Content-Type: application/json' -d "$data"); fi

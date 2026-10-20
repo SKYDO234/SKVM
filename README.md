@@ -78,7 +78,9 @@ Handy commands inside a Codespace:
 bash autosetup.sh --status      # is it up?
 bash autosetup.sh --logs        # follow the server log
 bash autosetup.sh --restart     # bounce it (also re-applies .env)
-CI=1 bash .scripts/smoke.sh     # 40+ route checks: pages, login, API, assets
+CI=1 bash .scripts/smoke.sh     # 43 route checks: pages, login, API, assets
+python .scripts/check_node_fallback.py   # an unusable node must degrade, not 500
+python .scripts/check_workflows.py       # every config parses, every CI step is valid shell
 ```
 
 CI runs exactly that bootstrap on every push and pull request — bare Ubuntu, a

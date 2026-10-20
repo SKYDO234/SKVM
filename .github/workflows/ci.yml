@@ -163,6 +163,10 @@ jobs:
           venv="${SKVM_VENV:-$GITHUB_WORKSPACE/instance/venv}"
           "$venv/bin/python" manage.py doctor
 
+          # A node whose agent secret is missing must degrade, not 500. Cheap to
+          # prove on any runner, and it is the state a hosted box lands in.
+          "$venv/bin/python" .scripts/check_node_fallback.py
+
           # One step on purpose: a panel started in an earlier step is not
           # guaranteed to survive to the next one.
           CI=1 bash .scripts/smoke.sh 8080

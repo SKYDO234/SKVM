@@ -44,7 +44,7 @@
         <dt>Priority</dt><dd>{{ node.priority }} (lower = first)</dd>
         <dt>Capacity</dt><dd class="mono">{{ node.capacity_cpu }}c · {{ (node.capacity_ram_mb/1024)|round(1) }}G · {{ node.capacity_disk_gb }}G</dd>
         <dt>Servers</dt><dd><a href="{{ url_for('admin.servers') }}">{{ server_counts.get(node.id, 0) }} on this node</a></dd>
-        <dt>Last seen</dt><dd class="tiny">{{ node.last_seen_at | human_delta if node.last_seen_at else 'never' }}{% if node.last_error %}<div class="tiny dim mono" style="white-space:pre-wrap">{{ node.last_error }}</div>{% endif %}</dd>
+        <dt>Last seen</dt><dd class="tiny">{{ node.last_seen_human or 'never' }}{% if node.last_error %}<div class="tiny dim mono" style="white-space:pre-wrap">{{ node.last_error }}</div>{% endif %}</dd>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn sm ghost" data-test="{{ node.id }}">{{ icon('activity', 13) }} Test</button>

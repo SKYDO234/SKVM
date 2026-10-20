@@ -17,7 +17,7 @@ from typing import Any
 
 from flask import current_app, has_app_context
 
-from .base import Backend, BackendError, ConsoleSession, ExecResult, InstanceInfo, NotSupported, ProvisionRequest
+from .base import Backend, BackendError, ConsoleSession, ExecResult, InstanceInfo, NotSupported, ProvisionRequest, UnavailableBackend
 from .demo_backend import DemoBackend
 from .docker_backend import DockerBackend
 from .node_backend import NodeBackend
@@ -26,8 +26,8 @@ log = logging.getLogger("skvm.backend")
 
 __all__ = [
     "Backend", "BackendError", "ConsoleSession", "ExecResult", "InstanceInfo", "NotSupported",
-    "ProvisionRequest", "DemoBackend", "DockerBackend", "NodeBackend",
-    "get_backend", "backend_status", "available_backends", "reset_cache",
+    "ProvisionRequest", "DemoBackend", "DockerBackend", "NodeBackend", "UnavailableBackend",
+    "get_backend", "connect_node", "backend_status", "available_backends", "reset_cache",
 ]
 
 _PROBE_LOCK = threading.Lock()
@@ -70,13 +70,13 @@ def get_backend(server=None, node=None) -> Backend:
     if node is None and server is not None:
         node = getattr(server, "node", None)
         if node is not None:
-            return NodeBackend(node)
+            return connect_node(node)
 
     if mode == "node":
         candidate = node or pick_node()
         if candidate is None:
-            raise BackendError("No online hypervisor nodes are registered", code="no_nodes")
-        return NodeBackend(candidate)
+            return UnavailableBackend("no online hypervisor node is registered")
+        return connect_node(candidate)
 
     if mode == "docker":
         return DockerBackend()
@@ -87,6 +87,37 @@ def get_backend(server=None, node=None) -> Backend:
         return DockerBackend()
     log.debug("docker unavailable (%s) — falling back to demo driver", detail)
     return DemoBackend()
+
+
+def _is_local_endpoint(value: str) -> bool:
+    """True when a node row describes *this* host rather than a remote agent."""
+    ep = (value or "").strip().lower()
+    return (
+        ep in ("", "local", "self", "localhost", "docker")
+        or ep.startswith("unix://")
+        or ep.endswith("/docker.sock")
+    )
+
+
+def connect_node(node) -> Backend:
+    """Driver for a registered node row.
+
+    ``bootstrap`` files the panel host's own socket in as a node so the fleet view
+    is not empty; that row has no agent and no shared secret, so it is served by
+    the local engine.  Any other node that cannot be talked to - secret rotated,
+    agent never enrolled, endpoint gone - still has to be *renderable*: callers get
+    an :class:`UnavailableBackend` carrying the reason instead of an exception out
+    of a page render.  Deliberately swallows construction errors for that reason.
+    """
+    if _is_local_endpoint(getattr(node, "endpoint", "")):
+        return DockerBackend()
+    try:
+        return NodeBackend(node)
+    except BackendError as exc:  # missing/rotated agent secret, bad endpoint
+        return UnavailableBackend(str(exc))
+    except Exception as exc:  # pragma: no cover - driver specific, never fail a GET
+        log.debug("node %s unusable: %s", getattr(node, "id", "?"), exc)
+        return UnavailableBackend(f"node {getattr(node, 'name', '')} is unusable: {exc}")
 
 
 def available_backends() -> list[dict[str, Any]]:
