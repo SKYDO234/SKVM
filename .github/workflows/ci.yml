@@ -1,0 +1,249 @@
+name: CI
+
+# Testing only - this workflow never deploys anything. It proves that
+# autosetup.sh takes a bare box to a live panel, that the panel answers on every
+# route the UI uses, and that both image variants boot.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PIP_NO_CACHE_DIR: "1"
+
+jobs:
+  lint:
+    name: Lint (shell, python, js, config)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in autosetup.sh docker/entrypoint.sh .scripts/*.sh; do
+            bash -n "$f"
+          done
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq shellcheck
+          fi
+          shellcheck -S warning -e SC1091 autosetup.sh docker/entrypoint.sh .scripts/smoke.sh
+
+      - name: Python syntax and undefined names
+        run: |
+          set -euo pipefail
+          python -m compileall -q skvm manage.py .scripts
+          pip install --quiet "ruff>=0.5"
+          ruff check skvm manage.py --select E9,F63,F7,F82 --output-format=github
+
+      - name: JavaScript syntax
+        run: |
+          set -euo pipefail
+          find static/js -name '*.js' -print0 | while IFS= read -r -d '' f; do
+            node --check "$f"
+          done
+
+      - name: Config files parse
+        run: |
+          set -euo pipefail
+          pip install --quiet pyyaml
+          python - <<'PY'
+          import json, pathlib
+          import yaml
+
+          for path in sorted(pathlib.Path(".").rglob("*.json")):
+              if ".git" in path.parts or "node_modules" in path.parts:
+                  continue
+              json.loads(path.read_text())
+              print("json ok:", path)
+
+          for name in ("rig.yaml", "docker-compose.yml"):
+              yaml.safe_load(pathlib.Path(name).read_text())
+              print("yaml ok:", name)
+
+          for wf in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              doc = yaml.safe_load(wf.read_text())
+              assert doc.get("jobs"), wf
+              print("workflow ok:", wf)
+          PY
+
+      - name: Dockerfile hygiene
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          curl -fsSL -o "$RUNNER_TEMP/hadolint" \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          chmod +x "$RUNNER_TEMP/hadolint"
+          "$RUNNER_TEMP/hadolint" --ignore DL3008,DL3009,DL3018,DL3013 Dockerfile
+
+  bootstrap:
+    name: autosetup · ${{ matrix.mode.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - name: bare ubuntu
+            expose: "0"
+          - name: codespaces
+            expose: "1"
+            url: https://skvm-demo-1a2b3c-8080.app.github.dev
+          - name: codesandbox
+            expose: "0"
+            url: https://abc12-8080.csb.app
+          - name: container image
+            expose: "0"
+            url: http://127.0.0.1:8080
+    env:
+      MODE: ${{ matrix.mode.name }}
+      EXPECT_URL: ${{ matrix.mode.url }}
+      DO_EXPOSE: ${{ matrix.mode.expose }}
+      # The markers each hosted environment exports, so the same detection code
+      # that runs in a Codespace is exercised here.
+      CODESPACES: ${{ matrix.mode.name == 'codespaces' && 'true' || '' }}
+      CODESPACE_NAME: ${{ matrix.mode.name == 'codespaces' && 'skvm-demo-1a2b3c' || '' }}
+      GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: ${{ matrix.mode.name == 'codespaces' && 'app.github.dev' || '' }}
+      CODESANDBOX_SSE: ${{ matrix.mode.name == 'codesandbox' && '1' || '' }}
+      CODESANDBOX_HOST: ${{ matrix.mode.name == 'codesandbox' && 'abc12-$PORT.csb.app' || '' }}
+      SKVM_IN_CONTAINER: ${{ matrix.mode.name == 'container image' && '1' || '' }}
+      SKVM_ADMIN_PASSWORD: ci-only-password
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Pretend the dependencies are baked into the image
+        if: matrix.mode.name == 'container image'
+        run: |
+          set -euo pipefail
+          python -m venv "$GITHUB_WORKSPACE/.venv"
+          "$GITHUB_WORKSPACE/.venv/bin/pip" install -q -r requirements.txt
+          echo "SKVM_VENV=$GITHUB_WORKSPACE/.venv" >> "$GITHUB_ENV"
+
+      - name: Bring the panel up
+        run: |
+          set -uo pipefail
+          flags=(--port 8080)
+          if [ "$DO_EXPOSE" = "1" ]; then flags+=(--expose); fi
+          if [ "$MODE" = "container image" ]; then flags+=(--skip-apt --skip-install); fi
+          echo "\$ bash autosetup.sh ${flags[*]}"
+          bash autosetup.sh "${flags[@]}" 2>&1 | tee /tmp/setup.log
+          if [ -n "${EXPECT_URL:-}" ]; then
+            if ! grep -q "SKVM_PANEL_URL=${EXPECT_URL}" .env; then
+              echo "expected SKVM_PANEL_URL=${EXPECT_URL} in .env:"
+              grep SKVM_PANEL_URL .env
+              exit 1
+            fi
+            echo "public url ok: ${EXPECT_URL}"
+          fi
+          if [ "$MODE" = "container image" ]; then
+            if grep -qi "Installing system packages" /tmp/setup.log; then
+              echo "container mode must not run apt"; exit 1
+            fi
+            if ! grep -q "dependencies already present" /tmp/setup.log; then
+              echo "container mode should reuse the baked venv"; exit 1
+            fi
+          fi
+
+      - name: Doctor
+        run: |
+          set -euo pipefail
+          venv="${SKVM_VENV:-$GITHUB_WORKSPACE/instance/venv}"
+          "$venv/bin/python" manage.py doctor
+
+      - name: Smoke test every route the UI uses
+        run: CI=1 bash .scripts/smoke.sh 8080
+
+      - name: Upload the server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skvm-log-${{ matrix.mode.name }}
+          path: |
+            instance/skvm.log
+            /tmp/setup.log
+          if-no-files-found: ignore
+
+  image:
+    name: image · ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    env:
+      SKVM_ADMIN_PASSWORD: ci-only-password
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [slim, docker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: skvm-ci:${{ matrix.variant }}
+          build-args: |
+            VARIANT=${{ matrix.variant }}
+
+      - name: Compose file resolves
+        run: docker compose -f docker-compose.yml config >/dev/null
+
+      - name: Boot the container
+        run: |
+          set -uo pipefail
+          extra=()
+          if [ "${{ matrix.variant }}" = "docker" ]; then
+            extra=(-v /var/run/docker.sock:/var/run/docker.sock -e SKVM_BACKEND=docker)
+          fi
+          docker run -d --name skvm -p 8080:8080 \
+            -e SKVM_ADMIN_PASSWORD="$SKVM_ADMIN_PASSWORD" \
+            "${extra[@]}" skvm-ci:${{ matrix.variant }}
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1; then exit 0; fi
+            sleep 3
+          done
+          echo "--- container logs ---"
+          docker logs skvm
+          exit 1
+
+      - name: Smoke test the running container
+        run: CI=1 bash .scripts/smoke.sh 8080
+
+      - name: Backend matches the variant promise
+        run: |
+          set -uo pipefail
+          health="$(curl -fsS http://127.0.0.1:8080/healthz)"
+          echo "$health"
+          if [ "${{ matrix.variant }}" = "docker" ]; then
+            if ! echo "$health" | grep -q '"docker": *true'; then
+              echo "the docker variant never reached the daemon"; exit 1
+            fi
+          fi
+
+      - name: Container logs
+        if: failure()
+        run: docker logs skvm 2>&1 | tail -n 200

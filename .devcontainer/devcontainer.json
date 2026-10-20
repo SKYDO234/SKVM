@@ -1,26 +1,45 @@
 {
   "name": "SKVM panel",
-  "comment": "Works on GitHub Codespaces and CodeSandbox VM sandboxes. autosetup.sh does the rest; every opened port is mapped to a public URL automatically by CodeSandbox, Codespaces forwards the ones listed below.",
+  "comment": "One dev container for GitHub Codespaces and CodeSandbox VM sandboxes. autosetup.sh does the installing, configuring and launching; the panel comes up on port 8080 with a simulated fleet. This is a test box: the forwarded port stays private until you publish it (bash autosetup.sh --expose).",
   "image": "mcr.microsoft.com/devcontainers/python:3.11-bookworm",
+  "hostRequirements": {
+    "cpus": 2,
+    "memory": "8GB",
+    "storage": "32GB"
+  },
   "features": {
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
   },
+  "containerEnv": {
+    "PORT": "8080",
+    "SKVM_ALLOW_REGISTRATION": "false",
+    "SKVM_ADMIN_USERNAME": "admin"
+  },
+  "remoteEnv": {
+    "SKVM_INSTANCE_DIR": "${containerWorkspaceFolder}/instance"
+  },
   "onCreateCommand": "bash ./autosetup.sh --no-run",
-  "updateContentCommand": "bash ./autosetup.sh --no-run --skip-apt",
+  "updateContentCommand": "bash ./autosetup.sh --no-run --skip-apt --skip-install",
+  "postStartCommand": "bash ./autosetup.sh --skip-apt --skip-install",
   "postAttachCommand": "bash ./autosetup.sh --status || bash ./autosetup.sh --skip-apt --skip-install",
   "forwardPorts": [8080],
   "portsAttributes": {
     "8080": {
       "label": "SKVM panel",
-      "onAutoForward": "openPreview"
+      "onAutoForward": "openPreview",
+      "visibility": "private",
+      "requireLocalPort": false
     }
   },
   "customizations": {
     "vscode": {
-      "extensions": ["ms-python.python", "kevinrose.vsc-python-indent"],
+      "extensions": ["ms-python.python", "kevinrose.vsc-python-indent", "foxundermoon.shell-format"],
       "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder}/instance/venv/bin/python",
-        "files.exclude": { "instance/": true }
+        "python.analysis.extraPaths": ["${workspaceFolder}"],
+        "files.exclude": { "instance/": true },
+        "files.watcherExclude": { "**/instance/**": true },
+        "terminal.integrated.defaultProfile.linux": "bash"
       }
     }
   }
