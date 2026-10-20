@@ -14,6 +14,11 @@
 #   docker build --build-arg VARIANT=docker -t skvm:docker .  # hypervisor host
 ARG PYTHON_VERSION=3.11
 ARG VARIANT=slim
+# Official image that ships just the Docker CLI (Debian-based, so its binary
+# runs in the slim runtime too). Override to pin a different release.
+ARG DOCKER_CLI_IMAGE=docker:27-cli
+
+FROM ${DOCKER_CLI_IMAGE} AS dockercli
 
 # ------------------------------------------------------------------ deps ----
 FROM python:${PYTHON_VERSION}-slim AS deps
@@ -56,23 +61,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 FROM runtime-slim AS runtime-docker
 # The socket is group-writable on the host, so this variant stays root and is
 # effectively root on the host - a lab/single-host choice, not a shared box.
-ARG TARGETARCH
-ARG DOCKER_CLI_VERSION=27.3.1
-RUN set -eux; \
-    case "${TARGETARCH:-amd64}" in \
-      amd64) arch=x86_64 ;; \
-      arm64) arch=aarch64 ;; \
-      *) arch=x86_64 ;; \
-    esac; \
-    curl -fsSL "https://download.docker.com/linux/static/stable/${arch}/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
-    tar -xzf /tmp/docker.tgz -C /tmp docker/docker docker/docker-compose; \
-    mv /tmp/docker/docker /usr/local/bin/docker; \
-    mkdir -p /usr/local/lib/docker/cli-plugins; \
-    mv /tmp/docker/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose; \
-    chmod 0755 /usr/local/bin/docker /usr/local/lib/docker/cli-plugins/docker-compose; \
-    rm -rf /tmp/docker /tmp/docker.tgz; \
-    docker --version; \
-    docker compose version
+# Only the docker CLI is added: the panel drives the daemon over its API
+# (docker-py), it does not shell out to `docker compose`.
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
+RUN docker --version
 USER 0:0
 
 # ------------------------------------------------------------------ final ---
