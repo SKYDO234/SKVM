@@ -7,11 +7,13 @@ name: Publish image
 #   ghcr.io/<owner>/skvm:latest          unprivileged, simulated fleet or node agents
 #   ghcr.io/<owner>/skvm:docker          + docker CLI, talks to a mounted daemon
 #
-# Tags: every push to the default branch and every v* tag; `latest` follows main.
+# Only releases are published: every v* tag, plus a manual run from the Actions
+# tab. An ordinary push to main runs the tests and nothing else - the repository is
+# public, so images appear on ghcr.io only when someone asks for them. `latest`
+# follows the newest tag.
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
     inputs:
