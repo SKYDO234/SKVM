@@ -11,6 +11,7 @@ from typing import Any
 
 from flask import (Flask, Response, current_app, g, has_request_context, jsonify, redirect,
                    render_template, request, url_for)
+from sqlalchemy.exc import OperationalError
 from werkzeug.exceptions import HTTPException
 
 from . import __version__
@@ -236,8 +237,28 @@ def _register_error_handlers(app: Flask) -> None:
             }), error.code
         return render_template("error.html", code=error.code, title=error.name, message=error.description), error.code
 
-    @app.errorhandler(Exception)
-    def _unhandled(error: Exception):  # pragma: no cover - safety net
+    @app.errorhandler(OperationalError)
+    def _db_busy(error: OperationalError):
+        """sqlite answering "database is locked" is a queue, not an incident.
+
+        One sqlite file, a thread pool and a background sampler: a write that cannot
+        start should be retried, not turned into a 500 for whoever happened to be
+        logging in, so the panel says "try again in a second" and keeps the log at
+        warning level.
+        """
+        if "locked" not in str(error).lower():
+            return _render_unhandled(error)
+        db.session.rollback()
+        log.warning("database busy on %s: %s", request.path, error)
+        message = "The control plane is finishing another write - try again in a moment."
+        if _json_wanted():
+            response = jsonify({"ok": False, "error": "database_busy", "status": 503, "message": message})
+            response.status_code = 503
+            response.headers["Retry-After"] = "2"
+            return response
+        return render_template("error.html", code=503, title="Database busy", message=message), 503
+
+    def _render_unhandled(error: Exception):
         log.exception("unhandled error on %s", request.path)
         if _json_wanted():
             return jsonify({"ok": False, "error": "internal_error", "status": 500,
@@ -246,6 +267,10 @@ def _register_error_handlers(app: Flask) -> None:
             "error.html", code=500, title="Internal error",
             message="The control plane hit an unexpected error. The incident was logged.",
         ), 500
+
+    @app.errorhandler(Exception)
+    def _unhandled(error: Exception):  # pragma: no cover - safety net
+        return _render_unhandled(error)
 
 
 def _register_cli(app: Flask) -> None:

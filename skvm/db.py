@@ -116,8 +116,9 @@ class Database:
             "future": True,
             "pool_pre_ping": True,
         }
+        busy_ms = int(app.config.get("SQL_BUSY_TIMEOUT_MS", 30_000))
         if url.startswith("sqlite"):
-            options["connect_args"] = {"check_same_thread": False, "timeout": 30}
+            options["connect_args"] = {"check_same_thread": False, "timeout": busy_ms / 1000.0}
         else:
             options.update(
                 pool_size=int(app.config.get("SQL_POOL_SIZE", 10)),
@@ -126,7 +127,7 @@ class Database:
             )
         self.engine = create_engine(url, **options)
         if url.startswith("sqlite"):
-            _install_sqlite_pragmas(self.engine)
+            _install_sqlite_pragmas(self.engine, busy_ms)
         self._factory = sessionmaker(bind=self.engine, expire_on_commit=False, future=True)
         app.extensions["skvm.db"] = self
         app.teardown_appcontext(self._teardown)
@@ -205,14 +206,23 @@ class Database:
             return False, str(exc)
 
 
-def _install_sqlite_pragmas(engine: Engine) -> None:
+def _install_sqlite_pragmas(engine: Engine, busy_ms: int = 15_000) -> None:
+    """Make one sqlite file behave with a thread pool and a background sampler.
+
+    WAL stops readers from blocking the writer; ``busy_timeout`` lets a writer queue
+    behind it. Both matter, and neither is enough on its own if a writer holds its
+    transaction across slow work - which is why the sampler commits per server (see
+    ``services/reaper.py``) and why a request that still loses the race answers 503
+    with ``Retry-After`` instead of a 500.
+    """
+
     @event.listens_for(engine, "connect")
     def _set_pragmas(dbapi_connection, _record):  # pragma: no cover - driver hook
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.execute(f"PRAGMA busy_timeout={int(busy_ms)}")
         cursor.close()
 
 
