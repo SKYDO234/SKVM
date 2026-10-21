@@ -1,0 +1,12 @@
+**/__pycache__
+**/*.pyc
+out/
+demo_out/
+instance/
+cache/
+runs/
+train/
+tests/
+notebooks/
+*.pt
+*.npz

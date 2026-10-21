@@ -7,3 +7,7 @@ runs/
 *.npz
 __pycache__/
 .ruff_cache/
+instance/
+build/
+*.egg-info/
+.venv/

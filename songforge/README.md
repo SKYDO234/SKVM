@@ -78,7 +78,13 @@ Verified in the sandbox this was built in (2 vCPU, no GPU):
 * the `external` backend, end-to-end, including a real trained checkpoint
   (a deliberately tiny 1-epoch run: it proves the plumbing, not the music);
 * the training stack: feature caching, a training run (loss decreasing), and
-  inference with the checkpoint (`train/tests`).
+  inference with the checkpoint (`train/tests`);
+* the web app + API: upload → queue → render → download, through the real HTTP
+  server, including size/type/rate/key checks (`tests/test_server.py`).
+
+Not built in the sandbox: the Docker image (no Docker daemon there). The
+Dockerfile is a standard `python:3.11-slim` build and is referenced by the
+deployment recipes, but run `docker build` yourself before trusting it.
 
 **Not** executed there, because the dependencies/GPU were unavailable: the
 Demucs separation path, the `musicgen` backend and the `ace-step` backend.
@@ -285,6 +291,42 @@ python -c "from songforge.audio import *; ..."   # report.json already has LUFS/
 
 ---
 
+## 5b. Let other people use it
+
+`songforge serve` runs a small web app **and** a JSON API: someone opens the
+link, drops a vocal, watches progress, plays the finished song and downloads
+song / instrumental / vocals. No account, no install for them.
+
+```bash
+pip install "songforge[server]"
+songforge serve --max-seconds 60 --workers 2 --ttl-hours 6
+# -> http://localhost:8000  (API docs at /docs)
+```
+
+Expose it with a tunnel (`cloudflared tunnel --url http://localhost:8000`), a
+€4 VPS behind Caddy, a Hugging Face Space, or a GPU host — all recipes,
+limits, costs, and the public-service checklist (consent, retention, model
+licences, abuse) are in **[DEPLOY.md](DEPLOY.md)**. A no-server option for
+individuals is **[notebooks/colab_songforge.ipynb](notebooks/colab_songforge.ipynb)**.
+
+Guard rails built in, all operator-controlled (never request-controlled): upload
+size, audio length, queue depth, per-IP rate limits, optional access code,
+automatic file deletion after a TTL, and a backend that is fixed by the server.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/jobs` | upload (`file`, `style?`, `prompt?`) → job id |
+| `GET /api/jobs/{id}` | status, elapsed, log tail, file URLs |
+| `GET /api/jobs/{id}/audio/{song\|instrumental\|vocals}` | WAV download |
+| `GET /api/jobs/{id}/report` | LUFS, peaks, detected tempo/key |
+| `DELETE /api/jobs/{id}` | delete now |
+| `GET /docs` | interactive OpenAPI |
+
+Measured on the 2-vCPU sandbox: 22.6 s vocal → **18 s** end to end through the
+API, queue and rendering included.
+
+---
+
 ## 6. Compute and cost (rough)
 
 | Setup | What it can do |
@@ -349,18 +391,22 @@ songforge/
 │   ├── mix.py          vocal cleanup, multiband duck, master
 │   ├── pipeline.py     the 5-stage orchestration
 │   ├── demo.py         synthetic vocal for a zero-asset demo + tests
-│   └── cli.py          `songforge run|separate|analyze|generate|mix|demo|doctor`
+│   ├── serve/          FastAPI app + web UI (`songforge serve`)
+│   └── cli.py          `songforge run|separate|analyze|generate|mix|demo|serve|doctor`
 ├── train/
 │   ├── songforge_train/{dataset,model,train,codec,infer}.py
 │   ├── configs/{small,medium}.json
 │   └── tests/
-├── tests/              20 tests, numpy only, ~12 s
+├── deploy/             Dockerfile, docker-compose, HF Space manifest
+├── notebooks/          Colab quickstart for people who do not want a server
+├── tests/              pipeline + server tests (numpy only; server tests need fastapi)
+├── DEPLOY.md           how to give everyone a link to it
 └── README.md           this file
 ```
 
 Run the tests:
 
 ```bash
-cd songforge && python -m unittest discover -s tests   # pipeline (numpy only)
-cd train && python -m unittest discover -s tests       # model (needs torch)
+cd songforge && python -m unittest discover -s tests         # pipeline + API
+cd train && python -m unittest discover -s tests             # model (needs torch)
 ```

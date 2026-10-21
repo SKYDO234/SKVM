@@ -108,6 +108,28 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_argument("--seed", type=int, default=3)
     d.add_argument("--bpm", type=float, default=104.0)
 
+    # ---- serve ----------------------------------------------------------
+    v = sub.add_parser("serve", help="run the web app + API for other people to use")
+    # every flag is optional: unset ones fall back to SONGFORGE_* environment
+    # variables, so containers can be configured without changing the command
+    v.add_argument("--host", default=None)
+    v.add_argument("--port", type=int, default=None)
+    v.add_argument("--backend", default=None, choices=sorted(available_backends()))
+    v.add_argument("--command", default=None,
+                   help="command template for the external backend")
+    v.add_argument("--workers", type=int, default=None, help="parallel render slots")
+    v.add_argument("--max-seconds", type=float, default=None)
+    v.add_argument("--max-upload-mb", type=float, default=None)
+    v.add_argument("--ttl-hours", type=float, default=None,
+                   help="delete finished jobs after")
+    v.add_argument("--rate-per-hour", type=int, default=None)
+    v.add_argument("--rate-per-day", type=int, default=None)
+    v.add_argument("--api-key", default=None, help="require this key for uploads")
+    v.add_argument("--instance", default=None, help="job storage directory")
+    v.add_argument("--title", default=None)
+    v.add_argument("--notice", default=None, help="banner text shown in the UI")
+    v.add_argument("--reload", action="store_true", help="auto-reload (development)")
+
     sub.add_parser("doctor", help="show which optional pieces are installed")
     return p
 
@@ -184,6 +206,40 @@ def main(argv=None) -> int:
         res = run_pipeline(cfg)
         print("\nsummary\n-------")
         print(summarize_report(res.report_path))
+        return 0
+
+    if args.cmd == "serve":
+        try:
+            import uvicorn
+        except Exception:
+            raise SystemExit("the web server needs: pip install 'songforge[server]'")
+        from .serve.app import ServerConfig, create_app
+        env = ServerConfig.from_env()
+
+        def pick(value, fallback):
+            return fallback if value is None else value
+
+        cfg = ServerConfig(
+            instance_dir=pick(args.instance, env.instance_dir),
+            host=pick(args.host, env.host),
+            port=pick(args.port, env.port),
+            backend=pick(args.backend, env.backend),
+            external_command=pick(args.command, env.external_command),
+            max_workers=pick(args.workers, env.max_workers),
+            max_seconds=pick(args.max_seconds, env.max_seconds),
+            max_upload_mb=pick(args.max_upload_mb, env.max_upload_mb),
+            ttl_hours=pick(args.ttl_hours, env.ttl_hours),
+            rate_per_hour=pick(args.rate_per_hour, env.rate_per_hour),
+            rate_per_day=pick(args.rate_per_day, env.rate_per_day),
+            api_key=pick(args.api_key, env.api_key),
+            title=pick(args.title, env.title),
+            notice=pick(args.notice, env.notice))
+        app = create_app(cfg)
+        print(f"songforge {__version__} on http://{cfg.host}:{cfg.port} "
+              f"(backend={cfg.backend}, workers={cfg.max_workers}, "
+              f"max {cfg.max_seconds:.0f}s / {cfg.max_upload_mb:.0f} MB)")
+        uvicorn.run(app, host=cfg.host, port=cfg.port, log_level="info",
+                    reload=args.reload)
         return 0
 
     if args.cmd == "doctor":

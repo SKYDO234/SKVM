@@ -1,0 +1,30 @@
+services:
+  songforge:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: songforge:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # who can use it
+      SONGFORGE_TITLE: "songforge"
+      SONGFORGE_NOTICE: "Free demo. Only upload vocals you have the rights to use."
+      # limits (protect your CPU and disk)
+      SONGFORGE_MAX_SECONDS: "60"
+      SONGFORGE_MAX_UPLOAD_MB: "25"
+      SONGFORGE_WORKERS: "2"
+      SONGFORGE_TTL_HOURS: "6"
+      SONGFORGE_RATE_PER_HOUR: "10"
+      SONGFORGE_RATE_PER_DAY: "40"
+      # backend: procedural (CPU) | external (e.g. your trained checkpoint)
+      SONGFORGE_BACKEND: "procedural"
+      # SONGFORGE_EXTERNAL_COMMAND: "python /models/infer.py --vocal {input} --out {output}"
+      # optional shared access code
+      # SONGFORGE_API_KEY: "change-me"
+    volumes:
+      - songforge-data:/data
+    restart: unless-stopped
+
+volumes:
+  songforge-data:

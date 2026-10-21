@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>songforge — vocal in, song out</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #111823; --panel-2: #16202d; --line: #223040;
+    --text: #e8eef6; --muted: #8ea0b5; --accent: #43d9a3; --accent-2: #5aa9ff;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: radial-gradient(1200px 600px at 15% -10%, #16324a 0%, transparent 60%),
+                radial-gradient(900px 500px at 100% 0%, #173a33 0%, transparent 55%), var(--bg);
+    color: var(--text); font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+  }
+  header { padding: 28px 20px 8px; max-width: 900px; margin: 0 auto; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo { width: 34px; height: 34px; border-radius: 10px;
+    background: conic-gradient(from 200deg, var(--accent), var(--accent-2), var(--accent));
+    box-shadow: 0 0 30px rgba(67,217,163,.35); }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .2px; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .notice { margin: 14px 0 0; padding: 10px 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel); color: var(--muted); font-size: 14px; }
+  main { max-width: 900px; margin: 0 auto; padding: 18px 20px 80px; }
+  .card { background: color-mix(in srgb, var(--panel) 92%, transparent);
+    border: 1px solid var(--line); border-radius: 16px; padding: 18px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  .drop { border: 1.5px dashed #2c4056; border-radius: 14px; padding: 26px 18px; text-align: center;
+    cursor: pointer; transition: .15s border-color, .15s background; background: var(--panel-2); }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #15261f; }
+  .drop strong { display: block; margin-bottom: 6px; font-size: 17px; }
+  .drop small { color: var(--muted); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  select, input[type=text], input[type=password] {
+    width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: #0d141d; color: var(--text); font: inherit;
+  }
+  button { font: inherit; cursor: pointer; border-radius: 10px; border: 1px solid transparent; }
+  .primary { width: 100%; margin-top: 16px; padding: 13px; font-weight: 600; color: #06231a;
+    background: linear-gradient(135deg, var(--accent), #7ef0c4); }
+  .primary:disabled { opacity: .45; cursor: not-allowed; }
+  .ghost { padding: 8px 12px; background: transparent; border-color: var(--line); color: var(--text); }
+  .ghost:hover { border-color: var(--accent); }
+  .status { margin-top: 16px; display: none; }
+  .status.on { display: block; }
+  .status-head { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .bar { height: 4px; border-radius: 3px; background: #1b2735; margin-top: 10px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 8%; background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width .5s ease; }
+  pre.log { margin: 12px 0 0; max-height: 190px; overflow: auto; padding: 12px; border-radius: 10px;
+    background: #0a1119; border: 1px solid var(--line); color: #9fb3c8; font-size: 12.5px; line-height: 1.45; }
+  .players { display: grid; gap: 12px; margin-top: 14px; }
+  .player { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+  .player h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: .3px; }
+  audio { width: 100%; height: 34px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .pill { border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; }
+  .err { color: var(--danger); margin-top: 12px; white-space: pre-wrap; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  a { color: var(--accent-2); }
+  footer { max-width: 900px; margin: 0 auto; padding: 0 20px 40px; color: var(--muted); font-size: 13px; }
+  .hint { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"></div>
+    <h1>songforge <span>— vocal in, song out</span></h1>
+  </div>
+  <p class="notice" id="notice" hidden></p>
+</header>
+
+<main>
+  <section class="card">
+    <div class="drop" id="drop">
+      <strong id="dropTitle">Drop a vocal, or click to choose a file</strong>
+      <small id="dropHint">WAV, MP3, FLAC, OGG, M4A</small>
+      <input type="file" id="file" accept=".wav,.mp3,.flac,.ogg,.m4a,.aiff,audio/*" hidden>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="style">Backing style</label>
+        <select id="style"></select>
+      </div>
+      <div>
+        <label for="prompt">Style description (optional)</label>
+        <input type="text" id="prompt" maxlength="120" placeholder="e.g. warm lo-fi, dreamy pads">
+      </div>
+    </div>
+
+    <div class="row" id="keyRow" hidden>
+      <div>
+        <label for="apikey">Access code</label>
+        <input type="password" id="apikey" placeholder="provided by the operator">
+      </div>
+    </div>
+
+    <button class="primary" id="go" disabled>Generate my song</button>
+    <p class="hint">Your vocal is analysed, a backing track is composed against its tempo, key
+      and structure, then both are mixed and mastered. Nothing is kept longer than the
+      retention window shown above.</p>
+
+    <div class="status" id="status">
+      <div class="status-head"><span class="dot" id="dot"></span><span id="stateText">queued</span></div>
+      <div class="bar"><i id="bar"></i></div>
+      <pre class="log" id="log"></pre>
+      <div class="err" id="err"></div>
+
+      <div class="players" id="players" hidden>
+        <div class="player">
+          <h3>FINAL SONG (vocals + backing, mastered)</h3>
+          <audio controls id="aSong"></audio>
+        </div>
+        <div class="player">
+          <h3>INSTRUMENTAL (generated)</h3>
+          <audio controls id="aInstr"></audio>
+        </div>
+        <div class="player">
+          <h3>VOCALS (your input)</h3>
+          <audio controls id="aVoc"></audio>
+        </div>
+      </div>
+
+      <div class="meta" id="meta"></div>
+      <div class="actions" id="actions" hidden>
+        <button class="ghost" id="share">Copy share link</button>
+        <button class="ghost" id="again">New song</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Open source: <span id="repo">github.com/SKYDO234/SKVM → songforge/</span>.
+  Generated music is AI-made; only upload vocals you have the rights to use.
+</footer>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const state = { file: null, jobId: null, timer: null, limits: {} };
+
+function setStep(text, pct) {
+  $("stateText").textContent = text;
+  if (pct !== undefined) $("bar").style.width = pct + "%";
+}
+
+async function health() {
+  try {
+    const r = await fetch("/api/health");
+    const h = await r.json();
+    state.limits = h.limits;
+    document.title = h.title + " — vocal in, song out";
+    $("notice").hidden = !h.notice;
+    $("notice").textContent = h.notice;
+    $("repo").textContent = "backend: " + h.backend + " · max " + h.limits.max_seconds +
+      "s · " + h.limits.max_upload_mb + " MB · files deleted after " + h.limits.ttl_hours + "h";
+    $("dropHint").textContent = "WAV, MP3, FLAC, OGG, M4A · up to " + h.limits.max_upload_mb +
+      " MB · first " + h.limits.max_seconds + "s are used";
+    const sel = $("style");
+    sel.innerHTML = "";
+    h.limits.styles.forEach((s) => {
+      const o = document.createElement("option");
+      o.value = s;
+      o.textContent = s === "auto" ? "auto (from the vocal)" : s;
+      sel.appendChild(o);
+    });
+    $("keyRow").hidden = !h.limits.api_key_required;
+    const saved = localStorage.getItem("songforge_key");
+    if (saved) $("apikey").value = saved;
+  } catch (e) { /* offline: the form stays disabled */ }
+}
+
+function pickFile(f) {
+  if (!f) return;
+  state.file = f;
+  $("dropTitle").textContent = f.name;
+  $("dropHint").textContent = (f.size / 1048576).toFixed(1) + " MB — ready";
+  $("go").disabled = false;
+}
+
+$("drop").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => pickFile(e.target.files[0]));
+["dragenter", "dragover"].forEach((ev) => $("drop").addEventListener(ev, (e) => {
+  e.preventDefault(); $("drop").classList.add("over");
+}));
+["dragleave", "drop"].forEach((ev) => $("drop").addEventListener(ev, (e) => {
+  e.preventDefault(); $("drop").classList.remove("over");
+}));
+$("drop").addEventListener("drop", (e) => pickFile(e.dataTransfer.files[0]));
+
+$("go").addEventListener("click", () => {
+  if (!state.file) return;
+  stopPolling();
+  $("go").disabled = true;
+  $("err").textContent = "";
+  $("players").hidden = true;
+  $("actions").hidden = true;
+  $("meta").innerHTML = "";
+  $("log").textContent = "";
+  $("status").classList.add("on");
+  setStep("uploading…", 4);
+
+  const fd = new FormData();
+  fd.append("file", state.file);
+  fd.append("style", $("style").value);
+  fd.append("prompt", $("prompt").value);
+  const key = $("apikey").value.trim();
+  if (key) localStorage.setItem("songforge_key", key);
+
+  const xhr = new XMLHttpRequest();
+  xhr.open("POST", "/api/jobs");
+  if (key) xhr.setRequestHeader("X-API-Key", key);
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) setStep("uploading…", 4 + 20 * (e.loaded / e.total));
+  };
+  xhr.onload = () => {
+    $("go").disabled = false;
+    let body = {};
+    try { body = JSON.parse(xhr.responseText); } catch (e) {}
+    if (xhr.status >= 300) {
+      fail(body.detail || ("upload failed (" + xhr.status + ")"));
+      return;
+    }
+    state.jobId = body.id;
+    history.replaceState(null, "", "#job=" + body.id);
+    setStep("queued…", 26);
+    poll();
+  };
+  xhr.onerror = () => { $("go").disabled = false; fail("network error"); };
+  xhr.send(fd);
+});
+
+function fail(msg) {
+  stopPolling();
+  $("stateText").textContent = "failed";
+  $("dot").style.background = "var(--danger)";
+  $("err").textContent = msg;
+  $("go").disabled = false;
+}
+
+function stopPolling() {
+  if (state.timer) { clearTimeout(state.timer); state.timer = null; }
+}
+
+async function poll() {
+  if (!state.jobId) return;
+  try {
+    const r = await fetch("/api/jobs/" + state.jobId);
+    if (r.status === 404) { fail("this job expired or was deleted"); return; }
+    const job = await r.json();
+    render(job);
+    if (job.status === "done" || job.status === "error") {
+      stopPolling();
+      return;
+    }
+  } catch (e) { /* transient; retry */ }
+  state.timer = setTimeout(poll, 1200);
+}
+
+function render(job) {
+  $("dot").style.background = job.status === "error" ? "var(--danger)" : "var(--accent)";
+  const label = job.status === "done" ? "done in " + job.elapsed + "s" :
+    job.status === "running" ? "composing… " + job.elapsed + "s" : job.status;
+  setStep(label, job.status === "done" ? 100 : Math.min(92, 30 + job.elapsed * 1.5));
+  const log = $("log");
+  log.textContent = (job.progress || []).join("\n");
+  log.scrollTop = log.scrollHeight;
+
+  if (job.status === "error") { fail(job.error || "generation failed"); return; }
+  if (job.status !== "done") return;
+
+  const F = job.files || {};
+  $("aSong").src = F.song; $("aInstr").src = F.instrumental; $("aVoc").src = F.vocals;
+  $("players").hidden = false;
+  $("actions").hidden = false;
+  $("go").disabled = false;
+  const s = job.summary || {};
+  $("meta").innerHTML = "";
+  const pills = [
+    (s.lufs !== undefined ? s.lufs + " LUFS" : null),
+    (s.peak_db !== undefined ? s.peak_db + " dBFS peak" : null),
+    (job.duration_s ? job.duration_s + "s vocal" : null),
+    ("style: " + job.style),
+    ("backend: " + (job.backend || "server default"))
+  ].filter(Boolean);
+  pills.forEach((t) => {
+    const d = document.createElement("span");
+    d.className = "pill";
+    d.textContent = t;
+    $("meta").appendChild(d);
+  });
+}
+
+$("share").addEventListener("click", async () => {
+  const url = location.origin + "/#job=" + state.jobId;
+  try {
+    await navigator.clipboard.writeText(url);
+    $("share").textContent = "copied!";
+    setTimeout(() => ($("share").textContent = "Copy share link"), 1600);
+  } catch (e) { prompt("Share link:", url); }
+});
+
+$("again").addEventListener("click", () => {
+  state.file = null;
+  stopPolling();
+  $("status").classList.remove("on");
+  $("file").value = "";
+  $("dropTitle").textContent = "Drop a vocal, or click to choose a file";
+  $("go").disabled = true;
+  history.replaceState(null, "", location.pathname);
+  health();
+});
+
+health().then(() => {
+  const m = location.hash.match(/job=([a-f0-9]+)/i);
+  if (m) {
+    state.jobId = m[1];
+    $("status").classList.add("on");
+    poll();
+  }
+});
+</script>
+</body>
+</html>
