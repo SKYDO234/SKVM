@@ -171,6 +171,13 @@ jobs:
             exit 1
           fi
 
+          # One sqlite file, a thread pool and a background sampler: writes must
+          # queue instead of losing to "database is locked".
+          if ! "$venv/bin/python" .scripts/check_db_contention.py; then
+            echo "::error::sqlite lock contention reached a request (see above)"
+            exit 1
+          fi
+
           # One step on purpose: a panel started in an earlier step is not
           # guaranteed to survive to the next one.
           if ! CI=1 bash .scripts/smoke.sh 8080; then

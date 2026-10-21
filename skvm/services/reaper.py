@@ -132,6 +132,10 @@ class Worker:
             if counter >= persist_every:
                 counter = 0
                 metrics.record_history(server, stats)
+                # Commit per write: the sweep also calls drivers, which can take a
+                # second or two each, and a write transaction held across the whole
+                # fleet is what starves a user logging in.
+                db.session.commit()
             self._history_counts[server.id] = counter
             sampled += 1
         db.session.commit()

@@ -148,6 +148,20 @@ expect_contains() { # expect_contains <needle> <path> [accept]
 }
 
 login() { # one cookie jar, one CSRF token, exactly like the browser does
+  local pw="$1" token attempt
+  for attempt in 1 2; do
+    login_once "$pw" || {
+      # A busy sqlite file answers 503 for a second; that is a queue, not a
+      # broken panel, so give it one more try before calling it a failure.
+      [ "$attempt" = "1" ] && [ "${LOGIN_BUSY:-0}" = "1" ] && continue
+      return 1
+    }
+    return 0
+  done
+  return 1
+}
+
+login_once() {
   local pw="$1" token
   token="$(curl -s -c "$JAR" -m 20 "${PROTO_HEADER[@]}" "${BASE}/login" | sed -n 's/.*csrf-token" content="\([^"]*\)".*/\1/p' | head -1)"
   if [ -z "$token" ]; then
@@ -162,6 +176,7 @@ login() { # one cookie jar, one CSRF token, exactly like the browser does
   if [ "$code" = "302" ] || [ "$code" = "200" ]; then
     say "  ok   logged in as admin"
   else
+    if [ "$code" = "503" ]; then LOGIN_BUSY=1; fi
     emit "login failed ($code) :: $(brief_body)"
     return 1
   fi
