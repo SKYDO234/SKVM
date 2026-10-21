@@ -1,0 +1,20 @@
+{
+  "channels": [64, 128, 256],
+  "blocks": 2,
+  "emb_dim": 192,
+  "crop_seconds": 8.0,
+  "batch_size": 8,
+  "lr": 2e-4,
+  "weight_decay": 0.01,
+  "warmup_steps": 500,
+  "epochs": 200,
+  "grad_clip": 1.0,
+  "ema_decay": 0.999,
+  "sigma_min": 0.05,
+  "sigma_max": 1.0,
+  "smooth_loss_weight": 0.1,
+  "val_fraction": 0.05,
+  "num_workers": 2,
+  "amp": true,
+  "seed": 1234
+}

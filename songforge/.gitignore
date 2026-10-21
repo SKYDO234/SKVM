@@ -1,0 +1,9 @@
+# generated audio / runs (keep checkpoints out of git)
+out/
+demo_out/
+cache/
+runs/
+*.pt
+*.npz
+__pycache__/
+.ruff_cache/

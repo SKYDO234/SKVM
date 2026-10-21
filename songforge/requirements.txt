@@ -1,0 +1,9 @@
+numpy>=1.23
+# optional but recommended
+soundfile>=0.12     # mp3/flac/ogg and 24-bit wav reading + writing
+# neural backends (pick what you need)
+# torch>=2.1
+# torchaudio>=2.1
+# audiocraft>=1.3   # MusicGen
+# demucs>=4.0       # vocal/instrumental separation
+# acestep           # see https://github.com/ace-step/ACE-Step (install from source)

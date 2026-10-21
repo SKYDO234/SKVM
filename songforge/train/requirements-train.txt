@@ -1,0 +1,7 @@
+# training + inference of your own model (CPU works, CUDA strongly recommended)
+torch>=2.1
+numpy>=1.23
+soundfile>=0.12
+
+# only needed to build datasets from full songs
+# demucs>=4.0
