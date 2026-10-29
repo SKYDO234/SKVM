@@ -53,6 +53,39 @@ TIMEZONE = _env("SKVM_TIMEZONE", default="UTC")
 ALLOW_REGISTRATION = _env("SKVM_ALLOW_REGISTRATION", default="true").lower() not in {"0", "false", "no"}
 COOKIE_SECURE = _env("SKVM_COOKIE_SECURE", default="false").lower() == "true"
 
+# Forwarded-header trust (X-Forwarded-Host/-Proto/-For). Explicit
+# SKVM_TRUST_PROXY=true/false always wins. When it is unset, trust is
+# enabled automatically in hosted preview environments (GitHub
+# Codespaces, Gitpod, VS Code dev containers): those proxies rewrite
+# Host to localhost:<port> and send the public *.app.github.dev host in
+# X-Forwarded-Host, so without ProxyFix Flask-WTF's CSRF referrer check
+# rejects every login POST with "The referrer does not match the host."
+_TRUTHY = {"1", "true", "yes", "on"}
+_FALSY = {"0", "false", "no", "off"}
+PROXY_ENV_MARKERS = (
+    "CODESPACES",
+    "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN",
+    "GITPOD_WORKSPACE_ID",
+    "GITPOD_WORKSPACE_URL",
+    "REMOTE_CONTAINERS",
+    "CODESANDBOX_HOST",
+    "SKVM_CONTAINER",
+)
+
+
+def trust_proxy_enabled() -> bool:
+    raw = os.getenv("SKVM_TRUST_PROXY")
+    if raw is not None and raw.strip() != "":
+        value = raw.strip().lower()
+        if value in _TRUTHY:
+            return True
+        if value in _FALSY:
+            return False
+    return any((os.getenv(name) or "").strip() for name in PROXY_ENV_MARKERS)
+
+
+TRUST_PROXY = trust_proxy_enabled()
+
 # First-run default admin (only used when no users exist yet and no
 # SKVM_ADMIN_USERNAME / SKVM_ADMIN_PASSWORD override is supplied).
 # Change this password immediately after your first login.

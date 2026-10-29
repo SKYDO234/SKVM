@@ -29,7 +29,8 @@ from core.config import (ALLOW_REGISTRATION, BACKEND, BIND, COOKIE_SECURE,
                          DATA_DIR, DB_PATH, DEFAULT_ADMIN_PASSWORD,
                          DEFAULT_ADMIN_USERNAME, DEFAULT_DISK_GB, DEFAULT_MEMORY_MB,
                          DEFAULT_VCPUS, HOSTNAME, MAX_VPS_PER_USER, PANEL_URL,
-                         PORT, SECRET_KEY, TIMEZONE, node_token)
+                         PORT, SECRET_KEY, TIMEZONE, node_token,
+                         trust_proxy_enabled)
 from core.crypto import decrypt_text, encrypt_text
 from core.extensions import csrf, limiter, login_manager, socketio
 from core.models import User
@@ -58,9 +59,12 @@ def create_app():
     csrf.init_app(app)
     limiter.init_app(app)
     socketio.init_app(app, cors_allowed_origins=[], async_mode="eventlet", manage_session=True)
-    if os.getenv("SKVM_TRUST_PROXY", "false").lower() == "true":
+    if trust_proxy_enabled():
+        # Behind the Codespaces/Gitpod/reverse-proxy forwarded host, make
+        # request.host/is_secure reflect the public URL. Otherwise the
+        # browser's public Referer fails Flask-WTF's CSRF host check.
         from werkzeug.middleware.proxy_fix import ProxyFix
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
     with app.app_context():
         db.init_db()
         # First-run bootstrap must also happen under Gunicorn (no __main__).

@@ -26,3 +26,43 @@ def test_installer_syntax():
     out = subprocess.run(["bash", str(ROOT / "install.sh"), "--help"],
                          capture_output=True, text=True)
     assert out.returncode == 0 and "Codespaces" in out.stdout
+
+
+def run_installer(*args):
+    return subprocess.run(["bash", str(ROOT / "install.sh"), *args],
+                          capture_output=True, text=True, timeout=20)
+
+
+def test_bare_backend_does_not_crash_on_shift():
+    # Regression: `bash install.sh --backend` died with
+    # "[SKVM] ERROR at line 37: shift 2". A bare --backend must use the
+    # documented docker default and keep parsing the remaining options
+    # (here --help, which exits before any installation starts).
+    out = run_installer("--backend", "--help")
+    assert out.returncode == 0
+    assert "using the default 'docker'" in out.stderr
+    assert "Codespaces" in out.stdout
+    assert "ERROR at line" not in out.stderr
+
+
+def test_missing_and_invalid_option_values_are_friendly():
+    out = run_installer("--port")
+    assert out.returncode == 2 and "--port requires a value" in out.stderr
+    assert "ERROR at line" not in out.stderr
+
+    out = run_installer("--backend=")
+    assert out.returncode == 2 and "--backend requires a value" in out.stderr
+
+    out = run_installer("--backend=wat")
+    assert out.returncode == 2 and "--backend must be docker, incus or both" in out.stderr
+
+    out = run_installer("--port=not-a-port")
+    assert out.returncode == 2 and "--port must be a number" in out.stderr
+
+
+def test_single_dash_backend_gets_a_helpful_hint():
+    out = run_installer("-backend")
+    assert out.returncode == 2
+    assert "Unknown argument: -backend" in out.stderr
+    assert "--backend docker" in out.stderr
+    assert "ERROR at line" not in out.stderr

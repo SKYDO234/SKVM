@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SKVM PANEL installer — Debian/Ubuntu (apt) and RHEL-family (dnf).
 #
-#   sudo bash install.sh [--backend docker|incus|both] [--noninteractive]
+#   sudo bash install.sh [--backend docker|incus|both] [--port 5555] [--noninteractive]
 #   bash install.sh [--container] [--background]   # Codespaces/containers
 #
 # Two install modes:
@@ -33,14 +33,40 @@ BACKGROUND=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --backend=*) BACKEND="${1#*=}"; shift ;;
-    --backend) BACKEND="${2:-docker}"; shift 2 ;;
+    --backend=*)
+      BACKEND="${1#*=}"
+      if [[ -z "$BACKEND" ]]; then
+        echo "[SKVM] --backend requires a value: docker, incus or both (e.g. --backend docker)" >&2
+        exit 2
+      fi
+      shift ;;
+    --backend)
+      if [[ $# -ge 2 && "$2" != -* ]]; then
+        BACKEND="$2"; shift 2
+      else
+        # Bare `--backend` (seen in Codespaces): fall back to the documented
+        # Docker default instead of crashing on `shift 2`.
+        echo "[SKVM] --backend has no value; using the default 'docker'. To choose one: --backend docker|incus|both" >&2
+        BACKEND="docker"; shift
+      fi ;;
     --noninteractive|-y) shift ;;
-    --port=*) PORT="${1#*=}"; shift ;;
+    --port=*)
+      PORT="${1#*=}"
+      if [[ -z "$PORT" ]]; then
+        echo "[SKVM] --port requires a value (e.g. --port 5555)" >&2
+        exit 2
+      fi
+      shift ;;
+    --port)
+      if [[ $# -lt 2 || "$2" == -* ]]; then
+        echo "[SKVM] --port requires a value (e.g. --port 5555)" >&2
+        exit 2
+      fi
+      PORT="$2"; shift 2 ;;
     --container) INSTALL_MODE="container"; shift ;;
     --systemd) INSTALL_MODE="systemd"; shift ;;
     --background) BACKGROUND=1; shift ;;
-    --help)
+    --help|-h)
       cat <<EOF
 SKVM PANEL installer
 Usage:
@@ -49,11 +75,27 @@ Usage:
 Force a mode with --systemd or --container (or SKVM_INSTALL_MODE=...).
 EOF
       exit 0 ;;
-    *) echo "Unknown argument: $1 (try --help)"; exit 2 ;;
+    -*)
+      echo "[SKVM] Unknown argument: $1" >&2
+      echo "[SKVM] Options use double dashes, e.g.: bash install.sh --backend docker (try --help)" >&2
+      exit 2 ;;
+    *)
+      echo "[SKVM] Unknown argument: $1 (try --help)" >&2
+      exit 2 ;;
   esac
 done
-case "$BACKEND" in docker|incus|both) ;; *) echo "--backend must be docker, incus or both"; exit 2 ;; esac
-case "$INSTALL_MODE" in auto|systemd|container) ;; *) echo "SKVM_INSTALL_MODE must be auto, systemd or container"; exit 2 ;; esac
+case "$BACKEND" in
+  docker|incus|both) ;;
+  *) echo "[SKVM] --backend must be docker, incus or both (e.g. --backend docker)" >&2; exit 2 ;;
+esac
+if ! [[ "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+  echo "[SKVM] --port must be a number between 1 and 65535 (e.g. --port 5555)" >&2
+  exit 2
+fi
+case "$INSTALL_MODE" in
+  auto|systemd|container) ;;
+  *) echo "[SKVM] SKVM_INSTALL_MODE must be auto, systemd or container" >&2; exit 2 ;;
+esac
 
 # ------------------------------------------------------------- mode detect
 systemd_running() {

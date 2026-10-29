@@ -86,6 +86,53 @@ def test_csrf_required(client):
     assert r.status_code == 400
 
 
+def test_trust_proxy_auto_detection(monkeypatch):
+    from core.config import PROXY_ENV_MARKERS, trust_proxy_enabled
+    for marker in PROXY_ENV_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    monkeypatch.delenv("SKVM_TRUST_PROXY", raising=False)
+    assert trust_proxy_enabled() is False
+
+    # Codespaces/Gitpod previews auto-enable forwarded-header trust...
+    monkeypatch.setenv("CODESPACES", "true")
+    assert trust_proxy_enabled() is True
+    # ...but an explicit operator setting always wins.
+    monkeypatch.setenv("SKVM_TRUST_PROXY", "false")
+    assert trust_proxy_enabled() is False
+    monkeypatch.setenv("SKVM_TRUST_PROXY", "true")
+    monkeypatch.delenv("CODESPACES", raising=False)
+    assert trust_proxy_enabled() is True
+
+
+def test_codespaces_forwarded_login_not_blocked_by_csrf_referrer(monkeypatch):
+    # GitHub Codespaces rewrites Host to localhost:5555 and sends the
+    # public preview host in X-Forwarded-Host (+ Proto https). Without
+    # ProxyFix, Flask-WTF rejects the login POST with
+    # "Bad Request: The referrer does not match the host."
+    monkeypatch.setenv("CODESPACES", "true")
+    monkeypatch.delenv("SKVM_TRUST_PROXY", raising=False)
+    from app import create_app
+    proxied_app = create_app()
+    proxied_app.config["TESTING"] = True
+    c = proxied_app.test_client()
+    public_host = "skvm-test-5555.app.github.dev"
+    headers = {
+        "X-Forwarded-For": "127.0.0.1",
+        "X-Forwarded-Host": public_host,
+        "X-Forwarded-Proto": "https",
+        "Referer": f"https://{public_host}/login",
+    }
+    page = c.get("/login", base_url="https://localhost:5555", headers=headers)
+    assert page.status_code == 200
+    import re
+    token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+    r = c.post("/login", base_url="https://localhost:5555", headers=headers,
+               data={"csrf_token": token, "username": "admin",
+                     "password": "TestAdminPass123"}, follow_redirects=False)
+    assert r.status_code in (302, 303), r.data[:300]
+    assert "/dashboard" in r.headers.get("Location", "")
+
+
 def test_admin_rbac(client):
     assert client.get("/admin").status_code in (302, 303)  # anon -> login
     _register(client, "bob", "BobPass12345")
