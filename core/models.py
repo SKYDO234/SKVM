@@ -1,9 +1,9 @@
 """SQLAlchemy models for SKVM PANEL.
 
-Table/column names intentionally match Omega Panel V4 (users, nodes, vps,
-jobs, settings) so an existing omega.db can be opened as skvm.db without a
-destructive migration. New SKVM columns are nullable/additive and are
-created by the lightweight migration in core.db.init_db().
+Core tables are users, nodes, vps, jobs and settings, plus SKVM's
+plans, os_images and audit_logs. New columns are nullable/additive and
+are created by the lightweight migration in core.db.init_db(), so older
+SKVM databases upgrade in place without data loss.
 """
 from __future__ import annotations
 from flask_login import UserMixin

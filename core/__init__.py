@@ -1,1 +1,1 @@
-# Omega Panel core package.
+"""SKVM PANEL core package."""

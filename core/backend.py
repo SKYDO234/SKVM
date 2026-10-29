@@ -63,7 +63,7 @@ def create(vps):
             vps.name, docker_image, vps.vcpus, vps.memory_mb, vps.disk_gb)
         docker_engine.wait_ready(vps.name)
         return {"container_id": cid, **notes}
-    # Incus (containers and QEMU VMs share the preserved Omega engine).
+    # Incus backend (system containers and QEMU virtual machines).
     create_instance(vps.name, vps.os_slug, vps.engine, vps.vcpus, vps.memory_mb, vps.disk_gb)
     st = incus_status_of(vps.name)
     return {"container_id": None, "ip": st.get("ip"), "disk_quota_enforced": True}

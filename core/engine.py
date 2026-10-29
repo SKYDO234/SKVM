@@ -90,8 +90,8 @@ def install_guest_support(name, family, auto_update=True):
         guest_exec(name,"rc-update add crond default 2>/dev/null || true; mkdir -p /etc/periodic/daily; printf '#!/bin/sh\napk update && apk upgrade\n' > /etc/periodic/daily/skvm-auto-update; chmod +x /etc/periodic/daily/skvm-auto-update",timeout=60)
     elif family=='arch':
         guest_exec(name,"pacman -Syu --noconfirm && pacman -S --noconfirm sudo curl ca-certificates openssh",timeout=600)
-        guest_file(name,'/etc/systemd/system/skvm-auto-update.service','''[Unit]\nDescription=Omega automatic OS update\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/pacman -Syu --noconfirm\n''')
-        guest_file(name,'/etc/systemd/system/skvm-auto-update.timer','''[Unit]\nDescription=Omega daily Arch updates\n\n[Timer]\nOnCalendar=daily\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n''')
+        guest_file(name,'/etc/systemd/system/skvm-auto-update.service','''[Unit]\nDescription=SKVM automatic OS update\nAfter=network-online.target\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/pacman -Syu --noconfirm\n''')
+        guest_file(name,'/etc/systemd/system/skvm-auto-update.timer','''[Unit]\nDescription=SKVM daily updates\n\n[Timer]\nOnCalendar=daily\nPersistent=true\n\n[Install]\nWantedBy=timers.target\n''')
         guest_exec(name,"systemctl daemon-reload && systemctl enable --now skvm-auto-update.timer",timeout=60)
 
 def get_ip(name):

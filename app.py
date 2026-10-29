@@ -1,7 +1,7 @@
 """SKVM PANEL — VPS hosting & management panel.
 
-Built on the Omega Panel V4 provisioning core (Incus engine, job worker,
-capability detection), rebranded and extended for SKVM:
+SKVM's own control plane (Incus + Docker backends, job worker,
+capability detection):
   * Docker backend (Docker SDK) alongside the preserved Incus backend
   * Flask-Login auth, Flask-SQLAlchemy storage (skvm.db), CSRF, rate limits
   * Plans with server-side resource enforcement, admin panel, branding
@@ -84,8 +84,8 @@ def bootstrap_admin():
     random + written to a 0600 credentials file."""
     if db.all_users():
         return None
-    username = (os.getenv("SKVM_ADMIN_USERNAME") or os.getenv("OMEGA_ADMIN_USERNAME") or "admin").strip() or "admin"
-    password = os.getenv("SKVM_ADMIN_PASSWORD") or os.getenv("OMEGA_ADMIN_PASSWORD")
+    username = (os.getenv("SKVM_ADMIN_USERNAME") or "admin").strip() or "admin"
+    password = os.getenv("SKVM_ADMIN_PASSWORD")
     generated = not password
     if generated:
         password = secrets.token_urlsafe(14)
@@ -121,7 +121,7 @@ def branding():
         "site_name": s.get("site_name") or "SKVM PANEL",
         "tagline": s.get("site_tagline") or "",
         "logo_url": s.get("logo_url") or "",
-        "accent": s.get("accent") or "#7c6aff",
+        "accent": s.get("accent") or "#5e6ad2",
         "website_url": s.get("website_url") or "",
         "discord_url": s.get("discord_url") or "",
         "support_email": s.get("support_email") or "",
@@ -192,7 +192,7 @@ def register_routes(app):
     @app.context_processor
     def ctx():
         b = branding() if request.endpoint not in ("static",) else {
-            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#7c6aff",
+            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#5e6ad2",
             "website_url": "", "discord_url": "", "support_email": "",
             "maintenance": False, "allow_registration": True}
         return {"brand": b, "timezone": TIMEZONE, "panel_url": PANEL_URL,
@@ -549,9 +549,9 @@ def register_routes(app):
     @admin_required
     def admin_settings():
         b = request.form
-        accent = (b.get("accent") or "#7c6aff").strip()
+        accent = (b.get("accent") or "#5e6ad2").strip()
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-            flash("Accent must be a hex colour like #7c6aff.", "danger")
+            flash("Accent must be a hex colour like #5e6ad2.", "danger")
             return redirect(url_for("admin"))
         for key in ("website_url", "discord_url", "logo_url"):
             val = (b.get(key) or "").strip()

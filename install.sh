@@ -4,7 +4,7 @@
 #   sudo bash install.sh [--backend docker|incus|both] [--noninteractive]
 #
 # Default backend is Docker (installed + validated). Incus is the preserved
-# Omega V4 backend and can be installed alongside with --backend both.
+# Incus can be installed alongside Docker with --backend both.
 # The panel binds 0.0.0.0:5555 via Gunicorn (eventlet, for the SocketIO
 # console). Put Nginx/Caddy + HTTPS in front for public deployments and
 # firewall 5555 accordingly (see README.md).

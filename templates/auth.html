@@ -5,8 +5,8 @@
   <div class="auth-card glass">
     <a class="brand justify-center" href="{{ url_for('index') }}">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
-      {% else %}<span class="brand-mark"><i data-lucide="server"></i></span>{% endif %}
-      <span><b>{{ brand.site_name }}</b><small>VPS Cloud</small></span>
+      {% else %}<span class="brand-mark brand-sk">SK</span>{% endif %}
+      <span><b>{{ brand.site_name }}</b><small>CLOUD COMPUTE</small></span>
     </a>
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}{% for cat, msg in messages %}<div class="flash flash-{{ cat }} mt-4">{{ msg }}</div>{% endfor %}{% endif %}

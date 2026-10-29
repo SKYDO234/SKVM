@@ -1,8 +1,8 @@
 """Data-access facade for SKVM PANEL (Flask-SQLAlchemy implementation).
 
-Preserves the Omega V4 function-level API (create_user, create_vps,
-create_job, ...) so the provisioning worker, node agent and web app keep
-working unchanged, while storage is now managed through SQLAlchemy.
+Provides the data-access API (create_user, create_vps, create_job, ...)
+shared by the web app, provisioning worker and node agent, implemented
+with SQLAlchemy.
 Requires an active Flask app context (web requests have one; job_runner
 and node.py push one explicitly).
 """
@@ -40,7 +40,7 @@ _DEFAULT_SETTINGS = {
     "site_name": "SKVM PANEL",
     "site_tagline": "Virtual servers, managed simply.",
     "logo_url": "",
-    "accent": "#7c6aff",
+    "accent": "#5e6ad2",
     "website_url": "",
     "discord_url": "",
     "support_email": "",
@@ -66,7 +66,7 @@ _PLANS = [
 
 def init_db():
     sqla.create_all()
-    # Additive migration for databases created by Omega V4 / early SKVM.
+    # Additive column migration for older SKVM databases.
     engine = sqla.engine
     insp = inspect(engine)
     existing = set(insp.get_table_names())

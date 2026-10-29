@@ -19,17 +19,18 @@
 </div>
 
 <section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="server"></i> Your virtual servers</h2><p>Real status from the virtualization backend. Start, stop, restart, open the console or manage access.</p></div>
+  <div class="card-head"><div><h2><i data-lucide="server"></i> Your fleet</h2><p>Real status from the virtualization backend. Start, stop, restart, open the console or manage access.</p></div>
   <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> Create VPS</a></div>
   {% if vps %}
-  <div class="vps-list">
+  <div class="fleet-grid" id="servers">
   {% for v in vps %}
-  <article class="vps-row">
-    <div class="vps-title"><span class="state state-{{ v.state }}"></span>
+  <article class="server-card">
+    <div class="sc-head"><span class="state state-{{ v.state }}"></span>
       <div class="min-w-0"><a class="vps-name" href="{{ url_for('vps_detail', vps_id=v.id) }}">{{ v.name }}</a>
-      <small>{{ v.os_slug }} · {{ v.backend }}{% if v.engine=='vm' %} VM{% else %} container{% endif %} · {{ v.ip_address or 'IP pending' }}</small></div></div>
-    <div class="specs"><span title="vCPU"><i data-lucide="cpu"></i>{{ v.vcpus }}</span><span title="RAM"><i data-lucide="memory-stick"></i>{{ v.memory_mb }} MiB</span><span title="Disk"><i data-lucide="hard-drive"></i>{{ v.disk_gb }} GiB</span><span class="badge badge-{{ v.state }}">{{ v.state }}</span></div>
-    <div class="row-actions">
+      <small>{{ v.os_slug }} · {{ v.backend }}{% if v.engine=='vm' %} VM{% else %} container{% endif %} · {{ v.ip_address or 'IP pending' }}</small></div>
+      <span class="badge badge-{{ v.state }} ml-auto">{{ v.state }}</span></div>
+    <div class="specs"><span title="vCPU"><i data-lucide="cpu"></i>{{ v.vcpus }} vCPU</span><span title="RAM"><i data-lucide="memory-stick"></i>{{ v.memory_mb }} MiB</span><span title="Disk"><i data-lucide="hard-drive"></i>{{ v.disk_gb }} GiB</span></div>
+    <div class="row-actions sc-actions">
       <a class="btn btn-small" href="{{ url_for('vps_detail', vps_id=v.id) }}"><i data-lucide="settings-2"></i> Manage</a>
       <a class="btn btn-small" href="{{ url_for('vps_console', vps_id=v.id) }}"><i data-lucide="terminal"></i> Console</a>
       <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='start') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Start"><i data-lucide="play"></i></button></form>

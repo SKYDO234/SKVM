@@ -3,7 +3,7 @@
   --bg-root:#0a0a0c; --bg-surface:#121216; --bg-elevated:#1a1a20; --bg-hover:#22222a;
   --border-subtle:#26262e; --border-medium:#33333e;
   --text-primary:#e8e8ed; --text-secondary:#a0a0b0; --text-muted:#6b6b7a;
-  --accent:#7c6aff; --accent-dim:#5c4ad0; --accent-glow:rgba(124,106,255,.28);
+  --accent:#5e6ad2; --accent-dim:#5c4ad0; --accent-glow:rgba(94,106,210,.28);
   --success:#2ecc71; --warning:#f0b34b; --danger:#e74c5a;
   --radius-sm:8px; --radius-md:12px; --radius-lg:18px;
   --shadow:0 12px 40px rgba(0,0,0,.5);
@@ -14,9 +14,9 @@ body{margin:0;background:var(--bg-root);color:var(--text-primary);font:14px/1.6 
 a{color:#b8aaff;text-decoration:none} a:hover{text-decoration:underline}
 h2{font-size:19px;margin:0} h3{margin:0 0 6px} .muted{color:var(--text-secondary)} .err{color:#ff9ba6}
 small{color:var(--text-muted)} code{font-family:"JetBrains Mono",monospace}
-.bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;background:radial-gradient(ellipse 80% 55% at 15% -5%,rgba(124,106,255,.16),transparent 60%),radial-gradient(ellipse 60% 50% at 90% 0%,rgba(46,204,113,.07),transparent 60%),var(--bg-root)}
+.bg-orbs{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:-1;background:radial-gradient(ellipse 80% 55% at 15% -5%,rgba(94,106,210,.16),transparent 60%),radial-gradient(ellipse 60% 50% at 90% 0%,rgba(46,204,113,.07),transparent 60%),var(--bg-root)}
 .orb{position:absolute;border-radius:50%;filter:blur(70px);opacity:.5;animation:drift 22s ease-in-out infinite alternate}
-.orb-a{width:420px;height:420px;background:rgba(124,106,255,.20);top:-140px;left:-80px}
+.orb-a{width:420px;height:420px;background:rgba(94,106,210,.20);top:-140px;left:-80px}
 .orb-b{width:340px;height:340px;background:rgba(88,80,220,.14);top:20%;right:-120px;animation-delay:-8s}
 .orb-c{width:280px;height:280px;background:rgba(46,120,204,.10);bottom:-100px;left:38%;animation-delay:-14s}
 @keyframes drift{from{transform:translate(0,0) scale(1)}to{transform:translate(40px,26px) scale(1.06)}}
@@ -35,7 +35,7 @@ small{color:var(--text-muted)} code{font-family:"JetBrains Mono",monospace}
 .nav-link{display:flex;gap:10px;align-items:center;padding:10px 12px;color:var(--text-secondary);border-radius:var(--radius-sm);font-weight:500;border:1px solid transparent}
 .nav-link svg{width:17px;height:17px;flex-shrink:0}
 .nav-link:hover{background:var(--bg-hover);color:var(--text-primary);text-decoration:none}
-.nav-link.active{background:rgba(124,106,255,.13);border-color:rgba(124,106,255,.35);color:#fff}
+.nav-link.active{background:rgba(94,106,210,.13);border-color:rgba(94,106,210,.35);color:#fff}
 .nav-sep{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-muted);padding:14px 12px 6px}
 .side-foot{margin-top:auto;display:grid;gap:10px;padding-top:14px;border-top:1px solid var(--border-subtle)}
 .user-chip{display:flex;gap:10px;align-items:center;min-width:0}
@@ -98,7 +98,7 @@ label small{display:block;margin-top:4px;font-weight:400}
 .flash-success{border-color:rgba(46,204,113,.45);color:#9bffc5}
 .flash-danger{border-color:rgba(231,76,90,.5);color:#ff9ba6}
 .flash-warning{border-color:rgba(240,179,75,.45);color:#ffd98a}
-.flash-info{border-color:rgba(124,106,255,.5);color:#d6ccff}
+.flash-info{border-color:rgba(94,106,210,.5);color:#d6ccff}
 .flash-console{white-space:pre-wrap;font-family:"JetBrains Mono",monospace;font-size:12px;max-height:320px;overflow:auto;color:#cfe3d8}
 .badge{font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--border-medium);color:var(--text-secondary);white-space:nowrap}
 .badge-running,.badge-done{border-color:rgba(46,204,113,.45);color:#9bffc5}
@@ -171,3 +171,17 @@ label small{display:block;margin-top:4px;font-weight:400}
   .check{padding-top:0}
 }
 @media(min-width:861px){#menuBtn{display:none}}
+
+/* SKVM identity: monogram, fleet cards, landing steps */
+.brand-sk{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:15px;letter-spacing:.02em;background:linear-gradient(135deg,#5e6ad2,#06b6d4);color:#fff}
+.ml-auto{margin-left:auto}
+.fleet-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.server-card{border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:rgba(8,8,11,.55);padding:15px;display:grid;gap:11px;transition:border-color .2s,transform .2s}
+.server-card:hover{border-color:rgba(94,106,210,.55);transform:translateY(-2px)}
+.sc-head{display:flex;gap:10px;align-items:flex-start}
+.sc-actions{border-top:1px solid var(--border-subtle);padding-top:11px}
+.metric{position:relative;overflow:hidden}
+.metric::before{content:"";position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,#5e6ad2,#06b6d4);opacity:.85}
+.hp-step{display:flex;gap:13px;align-items:flex-start;padding:11px;border:1px solid var(--border-subtle);border-radius:var(--radius-md);background:rgba(18,18,22,.6)}
+.hp-num{font-family:"JetBrains Mono",monospace;font-weight:700;color:#8f9bf0;border:1px solid rgba(94,106,210,.5);border-radius:8px;padding:5px 8px;font-size:12px}
+.hp-step b{display:block;font-size:13.5px}.hp-step small{display:block}
