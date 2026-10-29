@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# SKVM PANEL installer — Debian/Ubuntu (apt) and RHEL-family (dnf), systemd hosts.
+# SKVM PANEL installer — Debian/Ubuntu (apt) and RHEL-family (dnf).
 #
 #   sudo bash install.sh [--backend docker|incus|both] [--noninteractive]
+#   bash install.sh [--container] [--background]   # Codespaces/containers
 #
-# Default backend is Docker (installed + validated). Incus is the preserved
+# Two install modes:
+#   systemd   (default on real Linux servers): services in /opt/skvm-panel,
+#             requires root + a running systemd.
+#   container (auto-detected in GitHub Codespaces, rigbox, CodeSandbox,
+#             Gitpod and any environment without systemd): delegates to
+#             run.sh — user-space venv install, auto-generated SECRET_KEY
+#             + admin credentials in .env, panel + worker on port 5555.
+# Default backend is Docker (installed + validated).
 # Incus can be installed alongside Docker with --backend both.
+# The installer auto-generates SECRET_KEY and first-admin credentials
+# into /etc/skvm-panel/skvm.env (reinstalls never rotate them).
 # The panel binds 0.0.0.0:5555 via Gunicorn (eventlet, for the SocketIO
 # console). Put Nginx/Caddy + HTTPS in front for public deployments and
 # firewall 5555 accordingly (see README.md).
@@ -18,26 +28,103 @@ DATA_DIR="/var/lib/skvm-panel"
 CONF_DIR="/etc/skvm-panel"
 BACKEND="docker"
 PORT="${SKVM_PORT:-5555}"
+INSTALL_MODE="${SKVM_INSTALL_MODE:-auto}"   # auto | systemd | container
+BACKGROUND=0
 
-for arg in "$@"; do
-  case "$arg" in
-    --backend=*) BACKEND="${arg#*=}" ;;
-    --backend) shift; BACKEND="${1:-docker}" ;;
-    --noninteractive|-y) ;;
-    --port=*) PORT="${arg#*=}" ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --backend=*) BACKEND="${1#*=}"; shift ;;
+    --backend) BACKEND="${2:-docker}"; shift 2 ;;
+    --noninteractive|-y) shift ;;
+    --port=*) PORT="${1#*=}"; shift ;;
+    --container) INSTALL_MODE="container"; shift ;;
+    --systemd) INSTALL_MODE="systemd"; shift ;;
+    --background) BACKGROUND=1; shift ;;
     --help)
       cat <<EOF
 SKVM PANEL installer
-Usage: sudo bash install.sh [--backend docker|incus|both] [--port 5555] [--noninteractive]
+Usage:
+  sudo bash install.sh [--backend docker|incus|both] [--port 5555]   (systemd servers)
+  bash install.sh [--container] [--background]                       (Codespaces/containers)
+Force a mode with --systemd or --container (or SKVM_INSTALL_MODE=...).
 EOF
       exit 0 ;;
-    *) echo "Unknown argument: $arg (try --help)"; exit 2 ;;
+    *) echo "Unknown argument: $1 (try --help)"; exit 2 ;;
   esac
 done
 case "$BACKEND" in docker|incus|both) ;; *) echo "--backend must be docker, incus or both"; exit 2 ;; esac
+case "$INSTALL_MODE" in auto|systemd|container) ;; *) echo "SKVM_INSTALL_MODE must be auto, systemd or container"; exit 2 ;; esac
 
-if [[ "$(id -u)" -ne 0 ]]; then echo "Run as root: sudo bash install.sh"; exit 1; fi
-if ! command -v systemctl >/dev/null 2>&1; then echo "systemd is required."; exit 1; fi
+# ------------------------------------------------------------- mode detect
+systemd_running() {
+  command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]] && systemctl is-system-running >/dev/null 2>&1
+}
+in_container_env() {
+  [[ -f /.dockerenv ]] || [[ -n "${CODESPACES:-}" ]] || [[ -n "${REMOTE_CONTAINERS:-}" ]] \
+    || [[ -n "${GITPOD_WORKSPACE_ID:-}" ]] || [[ -n "${SKVM_CONTAINER:-}" ]]
+}
+if [[ "$INSTALL_MODE" == "auto" ]]; then
+  if systemd_running && ! in_container_env; then INSTALL_MODE="systemd"; else INSTALL_MODE="container"; fi
+fi
+
+install_container() {
+  echo "[SKVM] Codespace/container environment detected — using container install mode."
+  echo "[SKVM] (No systemd/root needed. For a systemd server, re-run with: sudo bash install.sh --systemd)"
+  cd "$APP_DIR"
+  if [[ "$BACKEND" == "incus" ]]; then
+    echo "[SKVM] NOTE: Incus/KVM cannot run inside most codespaces/containers; switching to the Docker backend."
+    export SKVM_BACKEND="docker"
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "[SKVM] python3 not found — trying to install it..."
+    if command -v apt-get >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip || true
+    fi
+    command -v python3 >/dev/null 2>&1 || { echo "Install Python 3.10+ (e.g. sudo apt install python3 python3-venv), then re-run: bash install.sh"; exit 1; }
+  fi
+  if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    echo "[SKVM] Tip: you ran with sudo — files will be root-owned. Prefer: bash install.sh (no sudo) in codespaces/containers."
+  fi
+  if [[ "$BACKGROUND" -eq 1 ]]; then
+    mkdir -p data
+    echo "[SKVM] Starting SKVM in the background (log: $APP_DIR/data/skvm-run.log)..."
+    nohup bash run.sh >data/skvm-run.log 2>&1 &
+    echo $! > data/skvm-run.pid
+    for _ in $(seq 1 30); do
+      curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 1
+    done
+    if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+      echo "[SKVM] Panel is UP on port $PORT."
+    else
+      echo "[SKVM] Panel is still starting — check: tail -f data/skvm-run.log"
+    fi
+    cat <<EOF
+------------------------------------------------------------
+ SKVM PANEL (container mode) installed + started
+ URL:      use your platform's forwarded port $PORT preview
+           (Codespaces: Ports panel -> 5555 -> Open in Browser)
+ Login:    grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env
+ Logs:     tail -f data/skvm-run.log   (worker: data/worker.log)
+ Stop:     kill \$(cat data/skvm-run.pid)
+------------------------------------------------------------
+EOF
+    exit 0
+  fi
+  echo "[SKVM] Handing over to run.sh (panel + worker, Ctrl+C to stop)..."
+  exec bash run.sh
+}
+
+if [[ "$INSTALL_MODE" == "container" ]]; then
+  install_container
+fi
+
+# ------------------------------------------------------------ systemd mode
+if [[ "$(id -u)" -ne 0 ]]; then echo "Run as root: sudo bash install.sh (or use container mode: bash install.sh --container)"; exit 1; fi
+if ! systemd_running; then
+  echo "systemd is not running on this host, so systemd mode cannot install services."
+  echo "Use container mode instead:  bash install.sh --container   (or just: bash run.sh)"
+  exit 1
+fi
 
 echo "[SKVM] Installing SKVM PANEL (backend: $BACKEND, port: $PORT) from $APP_DIR"
 
@@ -113,27 +200,56 @@ PYTHON_BIN="$(command -v python3)"
 "$INSTALL_DIR/venv/bin/python" -m pip install --upgrade pip wheel >/dev/null
 "$INSTALL_DIR/venv/bin/pip" install --no-cache-dir -r "$INSTALL_DIR/requirements.txt"
 
-# Environment (secrets are generated into 0600 files by the app itself)
+# --- Environment + auto-generated secrets ---------------------------------
+# SECRET_KEY and the first-admin credentials are generated here and added
+# to /etc/skvm-panel/skvm.env automatically. Re-running the installer never
+# rotates them: existing values (env file, secret file, operator-supplied
+# environment) always win, so sessions and stored VPS passwords stay valid.
+gen_secret() { "$PYTHON_BIN" -c 'import secrets; print(secrets.token_urlsafe(48))' 2>/dev/null || openssl rand -hex 32; }
+gen_admin_password() { "$PYTHON_BIN" -c 'import secrets; print(secrets.token_urlsafe(18))' 2>/dev/null || openssl rand -hex 12; }
+env_val() { [[ -f "$CONF_DIR/skvm.env" ]] && grep -E "^$1=" "$CONF_DIR/skvm.env" | tail -n 1 | cut -d= -f2- || true; }
+
+SECRET_KEY_VALUE="${SECRET_KEY:-${SKVM_SECRET_KEY:-}}"
+[[ -n "$SECRET_KEY_VALUE" ]] || SECRET_KEY_VALUE="$(env_val SECRET_KEY)"
+[[ -n "$SECRET_KEY_VALUE" ]] || SECRET_KEY_VALUE="$(env_val SKVM_SECRET_KEY)"
+if [[ -z "$SECRET_KEY_VALUE" && -f "$DATA_DIR/.secret_key" ]]; then
+  SECRET_KEY_VALUE="$(tr -d '[:space:]' < "$DATA_DIR/.secret_key")"
+fi
+[[ -n "$SECRET_KEY_VALUE" ]] || SECRET_KEY_VALUE="$(gen_secret)"
+# Keep the app's secret file in sync with the env value (env wins at runtime).
+printf '%s\n' "$SECRET_KEY_VALUE" > "$DATA_DIR/.secret_key"
+
+ADMIN_USER_VALUE="${SKVM_ADMIN_USERNAME:-}"
+[[ -n "$ADMIN_USER_VALUE" ]] || ADMIN_USER_VALUE="$(env_val SKVM_ADMIN_USERNAME)"
+[[ -n "$ADMIN_USER_VALUE" ]] || ADMIN_USER_VALUE="admin"
+ADMIN_PASS_VALUE="${SKVM_ADMIN_PASSWORD:-}"
+FRESH_DB=1; [[ -f "$DATA_DIR/skvm.db" ]] && FRESH_DB=0
+if [[ -z "$ADMIN_PASS_VALUE" && "$FRESH_DB" -eq 1 ]]; then
+  # Only add a generated password on first install; on reinstall the
+  # existing admin account is untouched (bootstrap ignores it anyway).
+  ADMIN_PASS_VALUE="$(env_val SKVM_ADMIN_PASSWORD)"
+  [[ -n "$ADMIN_PASS_VALUE" ]] || ADMIN_PASS_VALUE="$(gen_admin_password)"
+fi
+
 SKVM_BACKEND_VALUE="auto"
 [[ "$BACKEND" == "docker" ]] && SKVM_BACKEND_VALUE="docker"
 [[ "$BACKEND" == "incus" ]] && SKVM_BACKEND_VALUE="incus"
-cat > "$CONF_DIR/skvm.env" <<ENV
-SKVM_HOSTNAME=${SKVM_HOSTNAME:-skvm-node-1}
-SKVM_BIND=0.0.0.0
-SKVM_PORT=$PORT
-SKVM_BACKEND=$SKVM_BACKEND_VALUE
-SKVM_DATA_DIR=$DATA_DIR
-SKVM_DB=$DATA_DIR/skvm.db
-SKVM_SECRET_FILE=$DATA_DIR/.secret_key
-SKVM_NODE_TOKEN_FILE=$DATA_DIR/.node_token
-SKVM_TIMEZONE=${SKVM_TIMEZONE:-UTC}
-ENV
+{
+  printf 'SECRET_KEY=%s\n' "$SECRET_KEY_VALUE"
+  printf 'SKVM_HOSTNAME=%s\n' "${SKVM_HOSTNAME:-skvm-node-1}"
+  printf 'SKVM_BIND=0.0.0.0\n'
+  printf 'SKVM_PORT=%s\n' "$PORT"
+  printf 'SKVM_BACKEND=%s\n' "$SKVM_BACKEND_VALUE"
+  printf 'SKVM_DATA_DIR=%s\n' "$DATA_DIR"
+  printf 'SKVM_DB=%s\n' "$DATA_DIR/skvm.db"
+  printf 'SKVM_SECRET_FILE=%s\n' "$DATA_DIR/.secret_key"
+  printf 'SKVM_NODE_TOKEN_FILE=%s\n' "$DATA_DIR/.node_token"
+  printf 'SKVM_TIMEZONE=%s\n' "${SKVM_TIMEZONE:-UTC}"
+  printf 'SKVM_ADMIN_USERNAME=%s\n' "$ADMIN_USER_VALUE"
+  [[ -n "$ADMIN_PASS_VALUE" ]] && printf 'SKVM_ADMIN_PASSWORD=%s\n' "$ADMIN_PASS_VALUE"
+} > "$CONF_DIR/skvm.env"
 chown root:"$SERVICE_USER" "$CONF_DIR/skvm.env"; chmod 0640 "$CONF_DIR/skvm.env"
-# Preserve operator-supplied admin credentials for first bootstrap only
-if [[ -n "${SKVM_ADMIN_PASSWORD:-}" ]]; then
-  echo "SKVM_ADMIN_PASSWORD=$SKVM_ADMIN_PASSWORD" >> "$CONF_DIR/skvm.env"
-  echo "SKVM_ADMIN_USERNAME=${SKVM_ADMIN_USERNAME:-admin}" >> "$CONF_DIR/skvm.env"
-fi
+echo "[SKVM] SECRET_KEY + admin credentials generated into $CONF_DIR/skvm.env (0640)."
 
 export PYTHONPATH="$INSTALL_DIR"
 set -a; . "$CONF_DIR/skvm.env"; set +a
@@ -180,15 +296,19 @@ cat <<EOF
  Install path: $INSTALL_DIR
  Data / DB:    $DATA_DIR/skvm.db
  Backend:      $BACKEND (panel validates the daemon at deploy time)
- Admin login:  see $DATA_DIR/first_admin_credentials.txt (chmod 600)
+ Admin login:  username + password were auto-generated for you.
+   View them:  sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' $CONF_DIR/skvm.env
+           or: sudo cat $DATA_DIR/first_admin_credentials.txt (chmod 600)
 
  NEXT STEPS
  1. Firewall: allow $PORT/tcp only if exposing the panel directly:
       ufw allow $PORT/tcp   # or your cloud firewall
     Recommended production setup: Nginx/Caddy reverse proxy with HTTPS
     in front, then restrict $PORT to localhost. See README.md.
- 2. Read the credentials file once, sign in, change the password,
-    then delete the file:  shred -u $DATA_DIR/first_admin_credentials.txt
+ 2. Sign in with the generated admin credentials, change the password,
+    then delete the copies:  shred -u $DATA_DIR/first_admin_credentials.txt
+    (you may also remove the SKVM_ADMIN_PASSWORD line from skvm.env after
+    first login - it is only used when the first admin is created).
  3. Configure branding/plans/OS images under Admin after first login.
  4. Logs: journalctl -u skvm-panel -u skvm-jobs -f
 ============================================================

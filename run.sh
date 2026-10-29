@@ -38,6 +38,22 @@ DATA_DIR="${SKVM_DATA_DIR:-$APP_DIR/data}"
 export SKVM_DATA_DIR="$DATA_DIR"
 export SKVM_DB="${SKVM_DB:-$DATA_DIR/skvm.db}"
 mkdir -p "$DATA_DIR"
+# First run in a fresh clone/codespace: auto-create .env with a generated
+# SECRET_KEY and admin credentials, so there is nothing to fill in by hand.
+if [[ ! -f .env ]]; then
+  _gen() { python3 -c "import secrets; print(secrets.token_urlsafe($1))" 2>/dev/null || openssl rand -hex "$2"; }
+  {
+    printf 'SECRET_KEY=%s\n' "$(_gen 48 32)"
+    printf 'SKVM_PORT=%s\n' "$PORT"
+    printf 'SKVM_BIND=0.0.0.0\n'
+    printf 'SKVM_BACKEND=auto\n'
+    printf 'SKVM_ADMIN_USERNAME=%s\n' "${SKVM_ADMIN_USERNAME:-admin}"
+    printf 'SKVM_ADMIN_PASSWORD=%s\n' "${SKVM_ADMIN_PASSWORD:-$(_gen 18 12)}"
+  } > .env
+  chmod 600 .env 2>/dev/null || true
+  echo "[skvm] Created .env with auto-generated SECRET_KEY + admin credentials (chmod 600)."
+  echo "[skvm] View login: grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env  (keep this file private, never commit it)"
+fi
 [[ -f .env ]] && { set -a; . ./.env; set +a; } || true
 
 echo "=== SKVM PANEL launcher ==="
@@ -115,7 +131,7 @@ PYEOF
 echo "[skvm] Starting provisioning worker (log: $DATA_DIR/worker.log)..."
 "$VPY" job_runner.py >>"$DATA_DIR/worker.log" 2>&1 &
 WORKER_PID=$!
-cleanup() { kill "$WORKER_PID" 2>/dev/null || true; }
+cleanup() { kill "$WORKER_PID" "${PANEL_PID:-}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
 cat <<EOF
@@ -129,4 +145,6 @@ cat <<EOF
  Stop:     Ctrl+C
 ------------------------------------------------------------
 EOF
-venv/bin/gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app
+venv/bin/gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app &
+PANEL_PID=$!
+wait "$PANEL_PID"

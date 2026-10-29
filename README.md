@@ -28,6 +28,17 @@ SKVM's database schema (`users`, `nodes`, `vps`, `jobs`, `settings`, plus `plans
 
 ---
 
+## Install in GitHub Codespaces (and other containers)
+
+`install.sh` works there too — it auto-detects Codespaces/rigbox/CodeSandbox/Gitpod (no systemd) and switches to container mode (no root, no systemd, user-space install via `run.sh`):
+
+```bash
+bash install.sh                # foreground (Ctrl+C stops panel + worker)
+bash install.sh --background   # install + start detached, prints login/log commands
+```
+
+Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Login afterwards: `grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env`, then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*).
+
 ## Install (production, systemd host)
 
 ```bash
@@ -44,7 +55,7 @@ The installer:
 1. Installs host packages (Python, venv tooling, certificates, utilities).
 2. Installs and validates Docker and/or Incus. For Incus it also checks KVM — VM deploys fail cleanly on hosts without `/dev/kvm` (common on nested VPS), while containers keep working.
 3. Copies the application to `/opt/skvm-panel`, creates the `skvm-panel` service user (added to the `docker` / `incus-admin` groups), and builds the Python virtualenv.
-4. Writes `/etc/skvm-panel/skvm.env` (0640), initialises `/var/lib/skvm-panel/skvm.db`, and creates the first admin. If `SKVM_ADMIN_PASSWORD` is not supplied, a random password is written to `/var/lib/skvm-panel/first_admin_credentials.txt` (chmod 600) — it is never printed to logs or stored in source.
+4. **Auto-generates your secrets and login for you** — no manual `.env` editing: a random `SECRET_KEY` plus `SKVM_ADMIN_USERNAME`/`SKVM_ADMIN_PASSWORD` are generated and added to `/etc/skvm-panel/skvm.env` (0640), the same password is written to `/var/lib/skvm-panel/first_admin_credentials.txt` (chmod 600), and the database at `/var/lib/skvm-panel/skvm.db` is initialised. Re-running the installer never rotates the key or touches the existing admin. View your login any time with `sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' /etc/skvm-panel/skvm.env`.
 5. Enables the systemd services:
 
 | Unit | Role |
@@ -58,8 +69,9 @@ The installer:
 After installation:
 
 ```bash
-sudo cat /var/lib/skvm-panel/first_admin_credentials.txt   # sign in, change the password
-sudo shred -u /var/lib/skvm-panel/first_admin_credentials.txt
+sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' /etc/skvm-panel/skvm.env   # your generated key + admin login
+sudo cat /var/lib/skvm-panel/first_admin_credentials.txt            # same admin password (chmod 600)
+sudo shred -u /var/lib/skvm-panel/first_admin_credentials.txt       # after signing in + changing password
 curl http://127.0.0.1:5555/healthz
 journalctl -u skvm-panel -u skvm-jobs -f
 ```
@@ -106,8 +118,9 @@ git clone https://github.com/SKYDO234/SKVM.git && cd SKVM
 bash run.sh        # sets up, starts panel + provisioning worker on 5555
 ```
 
-`run.sh` creates the virtualenv, installs dependencies, initialises the
-database and first admin, auto-detects the container runtime (Docker
+`run.sh` creates the virtualenv, installs dependencies, auto-creates a
+`.env` with a generated `SECRET_KEY` and admin login on first run,
+initialises the database and first admin, auto-detects the container runtime (Docker
 socket → `dockerd` → rootless Podman), starts the provisioning worker,
 and serves the panel on **0.0.0.0:5555**. Forward port **5555** in your
 platform to get the preview URL. Set `SKVM_ADMIN_PASSWORD` as a platform
