@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% block heading %}Create VPS{% endblock %}
+{% block heading %}Launch Instance{% endblock %}
 {% block eyebrow %}DEPLOY{% endblock %}
 {% block content %}
 <section class="card glass max-w-3xl">
-  <div class="card-head"><div><h2><i data-lucide="rocket"></i> Deploy a new VPS</h2>
+  <div class="card-head"><div><h2><i data-lucide="rocket"></i> Configure your server</h2>
   <p>Limits are enforced on the server against your plan and the node's real capacity. Provisioning runs in the background with live progress.</p></div></div>
 
   {% if not plans or not os_images %}
@@ -33,7 +33,7 @@
     <label>RAM (MiB) <input type="number" name="memory" id="inMem" min="512" max="262144" step="256" value="{{ default_memory }}" required></label>
     <label>Disk (GiB) <input type="number" name="disk" id="inDisk" min="5" max="4096" value="{{ default_disk }}" required></label>
     <p class="muted full" id="planHint"></p>
-    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Deploy VPS</button>
+    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Launch server</button>
   </form>
   {% endif %}
 </section>

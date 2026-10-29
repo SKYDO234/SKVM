@@ -8,64 +8,79 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { theme: { extend: { colors: { accent: '{{ brand.accent }}' },
-      fontFamily: { sans: ['Inter','system-ui','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }
+      fontFamily: { sans: ['Inter','system-ui','sans-serif'], display: ['Space Grotesk','Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}">
   <style>:root{ --accent: {{ brand.accent }}; }</style>
   {% block head %}{% endblock %}
 </head>
 <body>
-<div class="bg-orbs" aria-hidden="true"><span class="orb orb-a"></span><span class="orb orb-b"></span><span class="orb orb-c"></span></div>
+<div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
 
 {% if current_user.is_authenticated %}
 <div class="shell">
   <aside class="sidebar" id="sidebar">
-    <a class="brand" href="{{ url_for('dashboard') }}">
+    <a class="brand" href="{{ url_for('dashboard') }}" aria-label="SKVM home">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
-      {% else %}<span class="brand-mark brand-sk">SK</span>{% endif %}
-      <span><b>{{ brand.site_name }}</b><small>CLOUD COMPUTE</small></span>
+      {% else %}<span class="brand-mark">S</span>{% endif %}
+      <span><b>SKVM</b><small>CLOUD OS</small></span>
     </a>
-    <nav class="nav">
-      <a class="nav-link {{ 'active' if request.endpoint=='dashboard' }}" href="{{ url_for('dashboard') }}"><i data-lucide="layout-dashboard"></i><span>Overview</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='create_vps' }}" href="{{ url_for('create_vps') }}"><i data-lucide="plus-circle"></i><span>Deploy Server</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='profile' }}" href="{{ url_for('profile') }}"><i data-lucide="user-round"></i><span>Profile</span></a>
+
+    <a class="launch-cta" href="{{ url_for('create_vps') }}"><i data-lucide="rocket"></i><span>Launch instance</span><i data-lucide="arrow-up-right" class="cta-arrow"></i></a>
+
+    <nav class="nav" aria-label="Primary">
+      <span class="nav-label">Workspace</span>
+      <a class="nav-link {{ 'active' if request.endpoint=='dashboard' }}" href="{{ url_for('dashboard') }}"><i data-lucide="layout-grid"></i><span>Command Center</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='create_vps' }}" href="{{ url_for('create_vps') }}"><i data-lucide="sparkles"></i><span>Launch Instance</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='profile' }}" href="{{ url_for('profile') }}"><i data-lucide="circle-user-round"></i><span>Profile</span></a>
       {% if current_user.is_admin %}
-      <div class="nav-sep">Administration</div>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin' }}" href="{{ url_for('admin') }}"><i data-lucide="shield"></i><span>Admin Overview</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_users' }}" href="{{ url_for('admin_users') }}"><i data-lucide="users"></i><span>Users</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_vps' }}" href="{{ url_for('admin_vps') }}"><i data-lucide="server-cog"></i><span>All VPS</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_nodes' }}" href="{{ url_for('admin_nodes') }}"><i data-lucide="network"></i><span>Nodes</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_plans' }}" href="{{ url_for('admin_plans') }}"><i data-lucide="layers"></i><span>Plans</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_os_images' }}" href="{{ url_for('admin_os_images') }}"><i data-lucide="disc-3"></i><span>OS Images</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_logs' }}" href="{{ url_for('admin_logs') }}"><i data-lucide="scroll-text"></i><span>Jobs &amp; Logs</span></a>
+      <span class="nav-label">Control Room</span>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin' }}" href="{{ url_for('admin') }}"><i data-lucide="sliders-horizontal"></i><span>Control Room</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_users' }}" href="{{ url_for('admin_users') }}"><i data-lucide="users-round"></i><span>People</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_vps' }}" href="{{ url_for('admin_vps') }}"><i data-lucide="servers"></i><span>All Servers</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_nodes' }}" href="{{ url_for('admin_nodes') }}"><i data-lucide="waypoints"></i><span>Nodes</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_plans' }}" href="{{ url_for('admin_plans') }}"><i data-lucide="layers-3"></i><span>Plans</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_os_images' }}" href="{{ url_for('admin_os_images') }}"><i data-lucide="disc-album"></i><span>OS Library</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_logs' }}" href="{{ url_for('admin_logs') }}"><i data-lucide="activity"></i><span>Jobs & Logs</span></a>
       {% endif %}
     </nav>
+
     <div class="side-foot">
       <div class="user-chip"><span class="avatar">{{ current_user.username[0]|upper }}</span>
-        <span class="min-w-0"><b class="truncate">{{ current_user.username }}</b><small>{{ current_user.role }}</small></span></div>
+        <span class="min-w-0"><b class="truncate">{{ current_user.username }}</b><small>{{ current_user.role }} account</small></span>
+        <span class="live-dot" title="Signed in"></span></div>
       <form method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-ghost w-full" type="submit"><i data-lucide="log-out"></i> Logout</button>
+        <button class="btn btn-ghost w-full" type="submit"><i data-lucide="log-out"></i> Sign out</button>
       </form>
     </div>
   </aside>
 
   <main class="main">
     <header class="topbar">
-      <button class="icon-btn lg:hidden" id="menuBtn" aria-label="Menu"><i data-lucide="menu"></i></button>
-      <div class="min-w-0">
-        <span class="eyebrow">{% block eyebrow %}{{ brand.site_name }}{% endblock %}</span>
-        <h1 class="truncate">{% block heading %}Dashboard{% endblock %}</h1>
+      <button class="icon-btn" id="menuBtn" aria-label="Open menu"><i data-lucide="menu"></i></button>
+      <div class="min-w-0 title-block">
+        <span class="eyebrow">{% block eyebrow %}SKVM OS{% endblock %}</span>
+        <h1 class="truncate">{% block heading %}Command Center{% endblock %}</h1>
       </div>
       <div class="top-actions">
-        {% if brand.discord_url %}<a class="icon-btn" href="{{ brand.discord_url }}" target="_blank" rel="noopener" title="Discord"><i data-lucide="message-circle"></i></a>{% endif %}
+        <a class="btn btn-primary top-launch" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New server</a>
+        {% if brand.discord_url %}<a class="icon-btn" href="{{ brand.discord_url }}" target="_blank" rel="noopener" title="Discord"><i data-lucide="messages-square"></i></a>{% endif %}
         {% if brand.website_url %}<a class="icon-btn" href="{{ brand.website_url }}" target="_blank" rel="noopener" title="Website"><i data-lucide="globe"></i></a>{% endif %}
-        <span class="user-pill"><span class="dot dot-ok"></span>{{ current_user.username }}</span>
+        <span class="user-pill"><span class="live-dot"></span>{{ current_user.username }}</span>
       </div>
     </header>
+
+    {% if default_pw_warning %}
+    <div class="security-alert"><i data-lucide="triangle-alert"></i>
+      <div><b>Change the default admin password.</b><span>This account is still using admin123. Set a strong password before exposing this panel.</span></div>
+      <a class="btn btn-small" href="{{ url_for('profile') }}">Change now</a>
+    </div>
+    {% endif %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}<div class="flash-stack">
@@ -77,7 +92,7 @@
     {% endwith %}
 
     {% block content %}{% endblock %}
-    <footer class="foot">SKVM Cloud Compute · Node time ({{ timezone }}){% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
+    <footer class="foot">SKVM Cloud OS · Crafted for fast, honest infrastructure · {{ timezone }}</footer>
   </main>
 </div>
 {% else %}

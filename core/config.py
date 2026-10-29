@@ -53,6 +53,12 @@ TIMEZONE = _env("SKVM_TIMEZONE", default="UTC")
 ALLOW_REGISTRATION = _env("SKVM_ALLOW_REGISTRATION", default="true").lower() not in {"0", "false", "no"}
 COOKIE_SECURE = _env("SKVM_COOKIE_SECURE", default="false").lower() == "true"
 
+# First-run default admin (only used when no users exist yet and no
+# SKVM_ADMIN_USERNAME / SKVM_ADMIN_PASSWORD override is supplied).
+# Change this password immediately after your first login.
+DEFAULT_ADMIN_USERNAME = "admin"
+DEFAULT_ADMIN_PASSWORD = "admin123"
+
 
 def _ensure_secret(path: Path) -> str:
     env_secret = os.getenv("SECRET_KEY") or os.getenv("SKVM_SECRET_KEY")

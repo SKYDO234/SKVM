@@ -206,7 +206,6 @@ PYTHON_BIN="$(command -v python3)"
 # rotates them: existing values (env file, secret file, operator-supplied
 # environment) always win, so sessions and stored VPS passwords stay valid.
 gen_secret() { "$PYTHON_BIN" -c 'import secrets; print(secrets.token_urlsafe(48))' 2>/dev/null || openssl rand -hex 32; }
-gen_admin_password() { "$PYTHON_BIN" -c 'import secrets; print(secrets.token_urlsafe(18))' 2>/dev/null || openssl rand -hex 12; }
 env_val() { [[ -f "$CONF_DIR/skvm.env" ]] && grep -E "^$1=" "$CONF_DIR/skvm.env" | tail -n 1 | cut -d= -f2- || true; }
 
 SECRET_KEY_VALUE="${SECRET_KEY:-${SKVM_SECRET_KEY:-}}"
@@ -225,10 +224,11 @@ ADMIN_USER_VALUE="${SKVM_ADMIN_USERNAME:-}"
 ADMIN_PASS_VALUE="${SKVM_ADMIN_PASSWORD:-}"
 FRESH_DB=1; [[ -f "$DATA_DIR/skvm.db" ]] && FRESH_DB=0
 if [[ -z "$ADMIN_PASS_VALUE" && "$FRESH_DB" -eq 1 ]]; then
-  # Only add a generated password on first install; on reinstall the
-  # existing admin account is untouched (bootstrap ignores it anyway).
+  # First install: keep any password already in the env file, otherwise
+  # use the documented default admin123 (change it after first login).
+  # On reinstall the existing admin account is untouched.
   ADMIN_PASS_VALUE="$(env_val SKVM_ADMIN_PASSWORD)"
-  [[ -n "$ADMIN_PASS_VALUE" ]] || ADMIN_PASS_VALUE="$(gen_admin_password)"
+  [[ -n "$ADMIN_PASS_VALUE" ]] || ADMIN_PASS_VALUE="admin123"
 fi
 
 SKVM_BACKEND_VALUE="auto"
@@ -249,7 +249,7 @@ SKVM_BACKEND_VALUE="auto"
   [[ -n "$ADMIN_PASS_VALUE" ]] && printf 'SKVM_ADMIN_PASSWORD=%s\n' "$ADMIN_PASS_VALUE"
 } > "$CONF_DIR/skvm.env"
 chown root:"$SERVICE_USER" "$CONF_DIR/skvm.env"; chmod 0640 "$CONF_DIR/skvm.env"
-echo "[SKVM] SECRET_KEY + admin credentials generated into $CONF_DIR/skvm.env (0640)."
+echo "[SKVM] SECRET_KEY generated + admin credentials (default admin/admin123 unless overridden) written to $CONF_DIR/skvm.env (0640)."
 
 export PYTHONPATH="$INSTALL_DIR"
 set -a; . "$CONF_DIR/skvm.env"; set +a
@@ -296,16 +296,17 @@ cat <<EOF
  Install path: $INSTALL_DIR
  Data / DB:    $DATA_DIR/skvm.db
  Backend:      $BACKEND (panel validates the daemon at deploy time)
- Admin login:  username + password were auto-generated for you.
-   View them:  sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' $CONF_DIR/skvm.env
+ Admin login:  admin / admin123  (unless you supplied SKVM_ADMIN_*)
+   View stored values:  sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' $CONF_DIR/skvm.env
            or: sudo cat $DATA_DIR/first_admin_credentials.txt (chmod 600)
+   IMPORTANT: change the default password right after your first login.
 
  NEXT STEPS
  1. Firewall: allow $PORT/tcp only if exposing the panel directly:
       ufw allow $PORT/tcp   # or your cloud firewall
     Recommended production setup: Nginx/Caddy reverse proxy with HTTPS
     in front, then restrict $PORT to localhost. See README.md.
- 2. Sign in with the generated admin credentials, change the password,
+ 2. Sign in (default admin / admin123), change the password immediately,
     then delete the copies:  shred -u $DATA_DIR/first_admin_credentials.txt
     (you may also remove the SKVM_ADMIN_PASSWORD line from skvm.env after
     first login - it is only used when the first admin is created).

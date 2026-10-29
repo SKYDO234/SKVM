@@ -1,69 +1,76 @@
 {% extends 'base.html' %}
-{% block title %}{{ brand.site_name }} — VPS Hosting{% endblock %}
+{% block title %}{{ brand.site_name }} — Cloud OS for VPS{% endblock %}
 {% block public %}
 <div class="public-wrap">
-  <header class="public-nav glass">
+  <header class="public-nav">
     <a class="brand" href="{{ url_for('index') }}">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
-      {% else %}<span class="brand-mark"><i data-lucide="server"></i></span>{% endif %}
-      <span><b>{{ brand.site_name }}</b><small>CLOUD COMPUTE</small></span>
+      {% else %}<span class="brand-mark">S</span>{% endif %}
+      <span><b>SKVM</b><small>CLOUD OS</small></span>
     </a>
     <nav>
-      {% if brand.discord_url %}<a href="{{ brand.discord_url }}" target="_blank" rel="noopener">Discord</a>{% endif %}
-      <a href="{{ url_for('login') }}">Login</a>
-      {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}">Get started</a>{% endif %}
+      {% if brand.discord_url %}<a href="{{ brand.discord_url }}" target="_blank" rel="noopener">Community</a>{% endif %}
+      <a href="{{ url_for('login') }}">Sign in</a>
+      {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}">Start free <i data-lucide="arrow-right"></i></a>{% endif %}
     </nav>
   </header>
 
-  <section class="hero glass">
+  <section class="hero">
     <div>
-      <span class="eyebrow">VIRTUAL PRIVATE SERVERS</span>
-      <h2>Your cloud,<br><span class="grad">deployed in seconds.</span></h2>
-      <p>{{ brand.tagline or 'SKVM gives you real Ubuntu & Debian servers with hard CPU, RAM and disk limits, a live browser console, and tmate SSH — deployed, monitored and controlled from one fast panel.' }}</p>
+      <span class="hero-pill"><span class="live-dot" style="margin:0"></span> SKVM CLOUD OS · VPS, REIMAGINED</span>
+      <h2>Servers that<br><span class="grad">feel instant.</span></h2>
+      <p>{{ brand.tagline or 'Launch real Ubuntu and Debian machines with hard limits, a terminal in your browser, SSH when you need it, and monitoring that tells the truth.' }}</p>
       <div class="flex gap-3 flex-wrap mt-6">
-        {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}"><i data-lucide="rocket"></i> Create your server</a>{% endif %}
+        {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}"><i data-lucide="rocket"></i> Launch your first server</a>{% endif %}
         <a class="btn" href="{{ url_for('login') }}"><i data-lucide="log-in"></i> Sign in</a>
       </div>
-      <div class="hero-points">
-        <span><i data-lucide="gauge"></i> Hard resource limits</span>
-        <span><i data-lucide="terminal"></i> Live web console</span>
-        <span><i data-lucide="key-round"></i> tmate SSH access</span>
+      <div class="hero-stats">
+        <div><b>{{ plans|length }}</b><small>Plans</small></div>
+        <div><b>{{ os_images|length }}</b><small>OS images</small></div>
+        <div><b>100%</b><small>Real telemetry</small></div>
       </div>
     </div>
-    <div class="hero-panel">
-      <div class="hp-step"><span class="hp-num">01</span><div><b>Pick a plan &amp; OS</b><small>Ubuntu or Debian, sized to your workload.</small></div></div>
-      <div class="hp-step"><span class="hp-num">02</span><div><b>Watch it deploy live</b><small>Real provisioning progress from the backend — never simulated.</small></div></div>
-      <div class="hp-step"><span class="hp-num">03</span><div><b>Console, SSH, control</b><small>Browser terminal, tmate SSH, power controls and live guest stats.</small></div></div>
+    <div class="launch-card" aria-hidden="true">
+      <div class="launch-card-head"><i></i><i></i><i></i><span style="margin-left:8px">skvm — launch</span></div>
+      <div class="launch-card-body">
+        <code>$ skvm launch ubuntu-24.04 --plan standard</code>
+        <div class="check-list">
+          <span><i data-lucide="circle-check"></i> Runtime verified before anything is created</span>
+          <span><i data-lucide="circle-check"></i> CPU, RAM and storage limits enforced by the backend</span>
+          <span><i data-lucide="circle-check"></i> SSH, tmate and root access configured in the guest</span>
+          <span><i data-lucide="circle-check"></i> Live progress — success only when the server really boots</span>
+        </div>
+      </div>
     </div>
   </section>
 
   {% if plans %}
-  <h3 class="section-title">Plans</h3>
+  <h3 class="section-title">Pick your compute</h3>
   <section class="grid grid-3">
     {% for p in plans %}
-    <div class="card plan-card">
-      <h3>{{ p.name }}</h3>
-      <div class="plan-specs"><span><i data-lucide="cpu"></i> {{ p.max_vcpus }} vCPU</span><span><i data-lucide="memory-stick"></i> {{ p.max_memory_mb }} MiB RAM</span><span><i data-lucide="hard-drive"></i> {{ p.max_disk_gb }} GiB disk</span><span><i data-lucide="server"></i> up to {{ p.max_vps }} VPS</span></div>
-      {% if brand.allow_registration %}<a class="btn btn-primary w-full" href="{{ url_for('register') }}">Start with {{ p.name }}</a>{% endif %}
+    <div class="card plan-card" style="margin-top:0">
+      <span class="eyebrow">{{ p.name }}</span>
+      <div class="plan-specs"><span><i data-lucide="cpu"></i> {{ p.max_vcpus }} vCPU</span><span><i data-lucide="memory-stick"></i> {{ p.max_memory_mb }} MiB memory</span><span><i data-lucide="hard-drive"></i> {{ p.max_disk_gb }} GiB storage</span><span><i data-lucide="servers"></i> Up to {{ p.max_vps }} servers</span></div>
+      {% if brand.allow_registration %}<a class="btn btn-primary w-full" href="{{ url_for('register') }}">Start with {{ p.name }} <i data-lucide="arrow-right"></i></a>{% endif %}
     </div>
     {% endfor %}
   </section>
   {% endif %}
 
   {% if os_images %}
-  <h3 class="section-title">Operating systems</h3>
+  <h3 class="section-title">Start from a clean OS</h3>
   <section class="grid grid-3">
     {% for img in os_images %}
-    <div class="card os-card"><i data-lucide="disc-3"></i><div><b>{{ img.label }}</b><small>{{ img.slug }}</small></div></div>
+    <div class="card os-card" style="margin-top:0"><i data-lucide="disc-3"></i><div><b>{{ img.label }}</b><small>{{ img.slug }} · Docker + Incus ready</small></div></div>
     {% endfor %}
   </section>
   {% endif %}
 
-  <section class="grid grid-3 mt-4">
-    <div class="card"><i data-lucide="shield-check" class="big-ic"></i><h3>Isolated by default</h3><p class="muted">Per-server CPU, memory and disk enforcement by the virtualization backend — not by honour system.</p></div>
-    <div class="card"><i data-lucide="activity" class="big-ic"></i><h3>Honest monitoring</h3><p class="muted">CPU, RAM, disk and uptime are read from each guest itself. Node health is shown separately, clearly labelled.</p></div>
-    <div class="card"><i data-lucide="life-buoy" class="big-ic"></i><h3>Built to recover</h3><p class="muted">Provisioning runs in a background worker that survives panel restarts and cleans up failed creations.</p></div>
+  <section class="grid grid-3">
+    <div class="card"><i data-lucide="shield-check" class="big-ic"></i><h3>Isolation you can verify</h3><p class="muted">Limits are applied by Docker, Podman or Incus — and the job receipt tells you when a storage quota could not be hard-enforced.</p></div>
+    <div class="card"><i data-lucide="terminal" class="big-ic"></i><h3>A terminal, not a toy</h3><p class="muted">The browser console attaches to the machine itself. tmate gives you a real SSH string whenever you want external access.</p></div>
+    <div class="card"><i data-lucide="heart-pulse" class="big-ic"></i><h3>Monitoring without theatre</h3><p class="muted">Host health and guest usage are separate, labelled, and read from the source. If a backend is down, SKVM says so.</p></div>
   </section>
-  <footer class="foot">{{ brand.site_name }} · VPS hosting{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
+  <footer class="foot">SKVM Cloud OS · Real servers, honestly managed{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
 </div>
 {% endblock %}

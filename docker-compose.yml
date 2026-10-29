@@ -18,7 +18,7 @@ services:
       SKVM_PORT: "5555"
       SKVM_ADMIN_USERNAME: "${SKVM_ADMIN_USERNAME:-admin}"
       # Recommended: set in a local .env file (never commit it)
-      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-}"
+      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-admin123}"
       DOCKER_HOST: "unix:///var/run/docker.sock"
     ports:
       - "5555:5555"

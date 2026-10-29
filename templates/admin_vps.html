@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
-{% block heading %}All VPS{% endblock %}
+{% block heading %}All Servers{% endblock %}
 {% block eyebrow %}ADMINISTRATION{% endblock %}
 {% block content %}
 <section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="plus-circle"></i> Create VPS for a user</h2><p>Admins may allocate beyond plan caps (sanity limits still apply). Provisioning is queued to the worker.</p></div></div>
+  <div class="card-head"><div><h2><i data-lucide="plus-circle"></i> Launch a server for a user</h2><p>Admins may allocate beyond plan caps (sanity limits still apply). Provisioning is queued to the worker.</p></div></div>
   <form method="post" action="{{ url_for('admin_create_vps') }}" class="form-grid">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Owner<select name="user_id" required>{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></label>
@@ -15,7 +15,7 @@
     <label>vCPU<input type="number" name="vcpus" value="2" min="1" max="64"></label>
     <label>RAM (MiB)<input type="number" name="memory" value="2048" min="512"></label>
     <label>Disk (GiB)<input type="number" name="disk" value="25" min="5"></label>
-    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Queue provisioning</button>
+    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Queue launch</button>
   </form>
 </section>
 
