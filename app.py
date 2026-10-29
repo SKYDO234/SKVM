@@ -26,7 +26,8 @@ from werkzeug.security import check_password_hash
 
 from core import backend, db
 from core.config import (ALLOW_REGISTRATION, BACKEND, BIND, COOKIE_SECURE,
-                         DATA_DIR, DB_PATH, DEFAULT_DISK_GB, DEFAULT_MEMORY_MB,
+                         DATA_DIR, DB_PATH, DEFAULT_ADMIN_PASSWORD,
+                         DEFAULT_ADMIN_USERNAME, DEFAULT_DISK_GB, DEFAULT_MEMORY_MB,
                          DEFAULT_VCPUS, HOSTNAME, MAX_VPS_PER_USER, PANEL_URL,
                          PORT, SECRET_KEY, TIMEZONE, node_token)
 from core.crypto import decrypt_text, encrypt_text
@@ -79,16 +80,18 @@ def load_user(user_id):
 
 
 def bootstrap_admin():
-    """Create the first admin once (requires app context). Password is
-    never logged or hard-coded: SKVM_ADMIN_PASSWORD if set, otherwise
-    random + written to a 0600 credentials file."""
+    """Create the first admin once (requires app context).
+
+    Credentials come from SKVM_ADMIN_USERNAME / SKVM_ADMIN_PASSWORD when
+    set; otherwise the documented first-run default admin/admin123 is
+    used. The login page flow flags accounts still on that default so
+    the operator is prompted to change it (Profile -> Change password).
+    """
     if db.all_users():
         return None
-    username = (os.getenv("SKVM_ADMIN_USERNAME") or "admin").strip() or "admin"
-    password = os.getenv("SKVM_ADMIN_PASSWORD")
-    generated = not password
-    if generated:
-        password = secrets.token_urlsafe(14)
+    username = (os.getenv("SKVM_ADMIN_USERNAME") or DEFAULT_ADMIN_USERNAME).strip() or DEFAULT_ADMIN_USERNAME
+    password = os.getenv("SKVM_ADMIN_PASSWORD") or DEFAULT_ADMIN_PASSWORD
+    generated = not os.getenv("SKVM_ADMIN_PASSWORD")
     uid = db.create_user(username, password, "admin", max_vps=999999)
     cred = DATA_DIR / "first_admin_credentials.txt"
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -121,7 +124,7 @@ def branding():
         "site_name": s.get("site_name") or "SKVM PANEL",
         "tagline": s.get("site_tagline") or "",
         "logo_url": s.get("logo_url") or "",
-        "accent": s.get("accent") or "#5e6ad2",
+        "accent": s.get("accent") or "#b8f135",
         "website_url": s.get("website_url") or "",
         "discord_url": s.get("discord_url") or "",
         "support_email": s.get("support_email") or "",
@@ -192,11 +195,12 @@ def register_routes(app):
     @app.context_processor
     def ctx():
         b = branding() if request.endpoint not in ("static",) else {
-            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#5e6ad2",
+            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#b8f135",
             "website_url": "", "discord_url": "", "support_email": "",
             "maintenance": False, "allow_registration": True}
         return {"brand": b, "timezone": TIMEZONE, "panel_url": PANEL_URL,
-                "current_user": current_user}
+                "current_user": current_user,
+                "default_pw_warning": bool(session.get("default_pw_warning"))}
 
     @app.before_request
     def maintenance_gate():
@@ -256,6 +260,9 @@ def register_routes(app):
                 session.clear()
                 login_user(user, remember=False)
                 session.permanent = True
+                session["default_pw_warning"] = bool(
+                    user.username == DEFAULT_ADMIN_USERNAME
+                    and check_password_hash(user.password_hash, DEFAULT_ADMIN_PASSWORD))
                 db.update_user(user.id, last_login_at=db.utcnow())
                 db.audit(user, "auth.login", user.username, "", request.remote_addr or "")
                 nxt = request.args.get("next") or ""
@@ -493,6 +500,7 @@ def register_routes(app):
                 else:
                     try:
                         db.set_user_password(current_user.id, request.form.get("new_password", ""))
+                        session.pop("default_pw_warning", None)
                         audit("auth.change_password", current_user.username)
                         flash("Password changed.", "success")
                     except Exception as e:
@@ -549,9 +557,9 @@ def register_routes(app):
     @admin_required
     def admin_settings():
         b = request.form
-        accent = (b.get("accent") or "#5e6ad2").strip()
+        accent = (b.get("accent") or "#b8f135").strip()
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-            flash("Accent must be a hex colour like #5e6ad2.", "danger")
+            flash("Accent must be a hex colour like #b8f135.", "danger")
             return redirect(url_for("admin"))
         for key in ("website_url", "discord_url", "logo_url"):
             val = (b.get(key) or "").strip()

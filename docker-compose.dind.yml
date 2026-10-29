@@ -31,7 +31,7 @@ services:
     environment:
       SKVM_PORT: "5555"
       SKVM_ADMIN_USERNAME: "${SKVM_ADMIN_USERNAME:-admin}"
-      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-}"
+      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-admin123}"
       DOCKER_HOST: "tcp://dind:2375"
     ports:
       - "5555:5555"

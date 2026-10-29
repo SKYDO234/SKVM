@@ -40,7 +40,7 @@ _DEFAULT_SETTINGS = {
     "site_name": "SKVM PANEL",
     "site_tagline": "Virtual servers, managed simply.",
     "logo_url": "",
-    "accent": "#5e6ad2",
+    "accent": "#b8f135",
     "website_url": "",
     "discord_url": "",
     "support_email": "",
@@ -81,6 +81,11 @@ def init_db():
     for key, value in _DEFAULT_SETTINGS.items():
         if sqla.session.get(Setting, key) is None:
             sqla.session.add(Setting(key=key, value=value))
+    # Rebrand migration: panels still on the previous default accent move
+    # to the new SKVM volt identity (custom admin colours are untouched).
+    _accent = sqla.session.get(Setting, "accent")
+    if _accent is not None and _accent.value == "#5e6ad2":
+        _accent.value = "#b8f135"
     if not sqla.session.query(Plan).first():
         for name, cpu, mem, disk, maxv in _PLANS:
             sqla.session.add(Plan(name=name, max_vcpus=cpu, max_memory_mb=mem,

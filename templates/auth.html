@@ -1,29 +1,41 @@
 {% extends 'base.html' %}
-{% block title %}{{ 'Login' if mode=='login' else 'Register' }} · {{ brand.site_name }}{% endblock %}
+{% block title %}{{ 'Sign in' if mode=='login' else 'Create account' }} · SKVM{% endblock %}
 {% block public %}
 <div class="auth-wrap">
-  <div class="auth-card glass">
-    <a class="brand justify-center" href="{{ url_for('index') }}">
-      {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
-      {% else %}<span class="brand-mark brand-sk">SK</span>{% endif %}
-      <span><b>{{ brand.site_name }}</b><small>CLOUD COMPUTE</small></span>
-    </a>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}{% for cat, msg in messages %}<div class="flash flash-{{ cat }} mt-4">{{ msg }}</div>{% endfor %}{% endif %}
-    {% endwith %}
-    <h2>{{ 'Welcome back' if mode=='login' else 'Create your account' }}</h2>
-    <p class="muted">{{ 'Sign in to manage your virtual servers.' if mode=='login' else 'Deploy your first VPS in minutes.' }}</p>
-    <form method="post" class="form-stack">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label>Username<input name="username" minlength="3" maxlength="32" required autocomplete="username" placeholder="e.g. alex"></label>
-      {% if mode=='register' %}<label>Email <span class="optional">(optional)</span><input type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>{% endif %}
-      <label>Password<input type="password" name="password" minlength="8" required autocomplete="{{ 'current-password' if mode=='login' else 'new-password' }}" placeholder="••••••••"></label>
-      <button class="btn btn-primary w-full" type="submit"><i data-lucide="{{ 'log-in' if mode=='login' else 'user-plus' }}"></i> {{ 'Login' if mode=='login' else 'Register' }}</button>
-    </form>
-    <p class="muted center mt-4">
-      {% if mode=='login' %}No account yet? <a href="{{ url_for('register') }}">Create one</a>
-      {% else %}Already registered? <a href="{{ url_for('login') }}">Back to login</a>{% endif %}
-    </p>
+  <div class="auth-shell">
+    <section class="auth-intro">
+      <a class="brand auth-brand" href="{{ url_for('index') }}">
+        {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
+        {% else %}<span class="brand-mark">S</span>{% endif %}
+        <span><b>SKVM</b><small>CLOUD OS</small></span>
+      </a>
+      <h2>Your next server is<br><span class="grad">one minute away.</span></h2>
+      <p>Real machines, hard limits, live telemetry and a terminal that connects to the guest itself.</p>
+      <div class="auth-feats">
+        <span><i data-lucide="rocket"></i> Ubuntu & Debian, deployed live</span>
+        <span><i data-lucide="terminal"></i> Browser console + tmate SSH</span>
+        <span><i data-lucide="shield-check"></i> Ownership and limits enforced server-side</span>
+      </div>
+    </section>
+    <section class="auth-card">
+      <span class="eyebrow">{{ 'WELCOME BACK' if mode=='login' else 'GET STARTED' }}</span>
+      <h2>{{ 'Sign in' if mode=='login' else 'Create account' }}</h2>
+      <p class="muted">{{ 'Pick up right where your fleet left off.' if mode=='login' else 'Create your account and launch your first instance.' }}</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}{% for cat, msg in messages %}<div class="flash flash-{{ cat }} mt-4">{{ msg }}</div>{% endfor %}{% endif %}
+      {% endwith %}
+      <form method="post" class="form-stack mt-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label>Username<input name="username" minlength="3" maxlength="32" required autocomplete="username" placeholder="e.g. alex"></label>
+        {% if mode=='register' %}<label>Email <span class="optional">(optional)</span><input type="email" name="email" autocomplete="email" placeholder="you@example.com"></label>{% endif %}
+        <label>Password<input type="password" name="password" minlength="8" required autocomplete="{{ 'current-password' if mode=='login' else 'new-password' }}" placeholder="••••••••"></label>
+        <button class="btn btn-primary w-full" type="submit">{{ 'Sign in' if mode=='login' else 'Create my account' }} <i data-lucide="arrow-right"></i></button>
+      </form>
+      <p class="muted center mt-4">
+        {% if mode=='login' %}New to SKVM? <a href="{{ url_for('register') }}">Create an account</a>
+        {% else %}Already have an account? <a href="{{ url_for('login') }}">Sign in</a>{% endif %}
+      </p>
+    </section>
   </div>
 </div>
 {% endblock %}

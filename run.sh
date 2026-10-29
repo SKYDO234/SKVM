@@ -13,9 +13,8 @@
 # Environment:
 #   SKVM_PORT=5555              panel port (Codespaces: forward 5555)
 #   SKVM_ADMIN_USERNAME=admin   first-run admin (default: admin)
-#   SKVM_ADMIN_PASSWORD=...     first-run password (recommended: set as a
-#                               Codespace/platform secret; otherwise a random
-#                               one is written to data/first_admin_credentials.txt)
+#   SKVM_ADMIN_PASSWORD=...     first-run admin password (default: admin123
+#                               — change it right after your first login)
 #   DOCKER_HOST=...             container runtime endpoint (auto-detected:
 #                               docker socket, then Podman sockets)
 set -Eeuo pipefail
@@ -48,10 +47,10 @@ if [[ ! -f .env ]]; then
     printf 'SKVM_BIND=0.0.0.0\n'
     printf 'SKVM_BACKEND=auto\n'
     printf 'SKVM_ADMIN_USERNAME=%s\n' "${SKVM_ADMIN_USERNAME:-admin}"
-    printf 'SKVM_ADMIN_PASSWORD=%s\n' "${SKVM_ADMIN_PASSWORD:-$(_gen 18 12)}"
+    printf 'SKVM_ADMIN_PASSWORD=%s\n' "${SKVM_ADMIN_PASSWORD:-admin123}"
   } > .env
   chmod 600 .env 2>/dev/null || true
-  echo "[skvm] Created .env with auto-generated SECRET_KEY + admin credentials (chmod 600)."
+  echo "[skvm] Created .env with auto-generated SECRET_KEY + admin login admin/admin123 (chmod 600). Change the password after login!"
   echo "[skvm] View login: grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env  (keep this file private, never commit it)"
 fi
 [[ -f .env ]] && { set -a; . ./.env; set +a; } || true

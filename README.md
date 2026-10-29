@@ -1,8 +1,8 @@
 # SKVM PANEL
 
-**SKVM PANEL — Cloud Compute.** A VPS hosting and management platform with user and admin dashboards, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
+**SKVM PANEL — Cloud OS.** A VPS hosting and management platform with user and admin dashboards, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
 
-![Stack](https://img.shields.io/badge/stack-Python%20%C2%B7%20Flask%20%C2%B7%20Docker%20%2B%20Incus-5e6ad2)
+![Stack](https://img.shields.io/badge/stack-Python%20%C2%B7%20Flask%20%C2%B7%20Docker%20%2B%20Incus-b8f135)
 
 ---
 
@@ -18,7 +18,7 @@
 | Honest monitoring | Host figures are labelled as host figures. Per-server usage is read from the guest itself (daemon stats, `/proc`, `df`, `free`). Nothing is fabricated. |
 | Provisioning engine | Dedicated worker (`skvm-jobs`) with queued/running/done/error jobs, live progress polling, idempotent retry (existing instances are adopted, not duplicated), automatic cleanup of half-created instances, and a 60-second watchdog that re-syncs state with the backend. |
 | Admin console | Branding (site name, logo, accent colour, website/Discord links, support email), maintenance mode, registration toggle, users (role/plan/quota/suspend/password/delete), servers (create-for-user, live resize, delete/force-delete), nodes, plans, OS images, plus provisioning jobs, audit log and application log. |
-| Security | Flask-Login sessions (HttpOnly, SameSite=Lax), Werkzeug password hashing, CSRF tokens on every form, rate-limited auth and deploy endpoints, suspended-account lockout, full audit trail. Secrets live only in environment variables or 0600 files — there are no default passwords. Backend calls use argument lists through the Docker SDK / Incus CLI; guest shells only receive panel-generated scripts with validated, quoted values. |
+| Security | Flask-Login sessions (HttpOnly, SameSite=Lax), Werkzeug password hashing, CSRF tokens on every form, rate-limited auth and deploy endpoints, suspended-account lockout, full audit trail. Secrets live only in environment variables or 0600 files — the documented first-login admin password is `admin123` and the panel warns until it is changed. Backend calls use argument lists through the Docker SDK / Incus CLI; guest shells only receive panel-generated scripts with validated, quoted values. |
 
 ## Stack
 
@@ -37,7 +37,7 @@ bash install.sh                # foreground (Ctrl+C stops panel + worker)
 bash install.sh --background   # install + start detached, prints login/log commands
 ```
 
-Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Login afterwards: `grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env`, then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*).
+Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Sign in as `admin` / `admin123` (change it immediately in Profile), then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*).
 
 ## Install (production, systemd host)
 
@@ -55,7 +55,7 @@ The installer:
 1. Installs host packages (Python, venv tooling, certificates, utilities).
 2. Installs and validates Docker and/or Incus. For Incus it also checks KVM — VM deploys fail cleanly on hosts without `/dev/kvm` (common on nested VPS), while containers keep working.
 3. Copies the application to `/opt/skvm-panel`, creates the `skvm-panel` service user (added to the `docker` / `incus-admin` groups), and builds the Python virtualenv.
-4. **Auto-generates your secrets and login for you** — no manual `.env` editing: a random `SECRET_KEY` plus `SKVM_ADMIN_USERNAME`/`SKVM_ADMIN_PASSWORD` are generated and added to `/etc/skvm-panel/skvm.env` (0640), the same password is written to `/var/lib/skvm-panel/first_admin_credentials.txt` (chmod 600), and the database at `/var/lib/skvm-panel/skvm.db` is initialised. Re-running the installer never rotates the key or touches the existing admin. View your login any time with `sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' /etc/skvm-panel/skvm.env`.
+4. **Auto-generates your secret and stores your login config for you** — no manual `.env` editing: a random `SECRET_KEY` is generated and added to `/etc/skvm-panel/skvm.env` (0640). The first admin defaults to `admin` / `admin123` unless you set `SKVM_ADMIN_USERNAME`/`SKVM_ADMIN_PASSWORD` before installing; the credentials are also recorded in `/var/lib/skvm-panel/first_admin_credentials.txt` (chmod 600) and the database at `/var/lib/skvm-panel/skvm.db` is initialised. Re-running the installer never rotates the key or touches the existing admin. **Change `admin123` immediately after first sign-in.**
 5. Enables the systemd services:
 
 | Unit | Role |
@@ -69,8 +69,8 @@ The installer:
 After installation:
 
 ```bash
-sudo grep -E '^(SECRET_KEY|SKVM_ADMIN)' /etc/skvm-panel/skvm.env   # your generated key + admin login
-sudo cat /var/lib/skvm-panel/first_admin_credentials.txt            # same admin password (chmod 600)
+# Sign in: admin / admin123 (or your SKVM_ADMIN_* overrides), then change the password
+sudo cat /var/lib/skvm-panel/first_admin_credentials.txt            # recorded first-admin credentials (chmod 600)
 sudo shred -u /var/lib/skvm-panel/first_admin_credentials.txt       # after signing in + changing password
 curl http://127.0.0.1:5555/healthz
 journalctl -u skvm-panel -u skvm-jobs -f
@@ -119,12 +119,13 @@ bash run.sh        # sets up, starts panel + provisioning worker on 5555
 ```
 
 `run.sh` creates the virtualenv, installs dependencies, auto-creates a
-`.env` with a generated `SECRET_KEY` and admin login on first run,
+`.env` with a generated `SECRET_KEY` on first run (admin login defaults to `admin` / `admin123`),
 initialises the database and first admin, auto-detects the container runtime (Docker
 socket → `dockerd` → rootless Podman), starts the provisioning worker,
 and serves the panel on **0.0.0.0:5555**. Forward port **5555** in your
-platform to get the preview URL. Set `SKVM_ADMIN_PASSWORD` as a platform
-secret before first run, or read `data/first_admin_credentials.txt` once.
+platform to get the preview URL. Sign in as `admin` / `admin123` and
+change the password immediately; set `SKVM_ADMIN_PASSWORD` before first
+run if you prefer a custom initial password.
 
 | Platform | Steps | VPS provisioning |
 |---|---|---|
@@ -132,7 +133,7 @@ secret before first run, or read `data/first_admin_credentials.txt` once.
 | **rigbox.dev** | Open a box, `git clone … && cd SKVM && bash run.sh`. If Docker/Podman isn't preinstalled, the launcher tries to start `dockerd`/rootless Podman itself. | ✅ When Docker or Podman is available/installable on the box |
 | **CodeSandbox** | Import the repo — `.codesandbox/tasks.json` installs deps and runs `bash run.sh` with a 5555 preview. CodeSandbox can also read the `.devcontainer`. | ✅ On VM-based devboxes with Docker; otherwise panel-only (see below) |
 | **Gitpod** | Open the repo — `.gitpod.yml` runs setup + `bash run.sh`, preview on 5555. | ✅ Gitpod workspaces include Docker |
-| **Any Docker host** | `docker compose up -d --build` (host socket mode) or `docker compose -f docker-compose.dind.yml up -d --build` (privileged DinD — isolated sandboxes only). First admin: `docker compose exec panel cat /data/first_admin_credentials.txt`. | ✅ Socket mode = sibling containers on the host daemon |
+| **Any Docker host** | `docker compose up -d --build` (host socket mode) or `docker compose -f docker-compose.dind.yml up -d --build` (privileged DinD — isolated sandboxes only). Sign in as `admin` / `admin123` and change it immediately (or set `SKVM_ADMIN_PASSWORD` first). | ✅ Socket mode = sibling containers on the host daemon |
 | **Plain Linux VPS (systemd)** | `sudo bash install.sh` — see above. | ✅ Docker and/or Incus, incl. KVM VMs on Incus |
 
 **Honest limits:** a "VPS" here is a real Docker/Podman container (or
@@ -149,7 +150,7 @@ where `dockerd` cannot run.
 ```bash
 python3 -m venv venv && venv/bin/pip install -r requirements.txt pytest
 cp .env.example .env
-SKVM_ADMIN_PASSWORD='choose-a-strong-one' venv/bin/python app.py   # http://localhost:5555
+SKVM_ADMIN_PASSWORD='choose-a-strong-one' venv/bin/python app.py   # http://localhost:5555 (omit to use admin123)
 venv/bin/python -m pytest tests/ -q
 bash scripts/verify.sh
 ```
@@ -166,11 +167,11 @@ All configuration is via `SKVM_*` environment variables (`.env` locally, `/etc/s
 | `SKVM_BIND` / `SKVM_PORT` | `0.0.0.0` / `5555` | Panel listen address |
 | `SKVM_BACKEND` | `auto` | `auto` · `docker` · `incus` |
 | `SKVM_DB` | `data/skvm.db` | SQLite database path |
-| `SKVM_ADMIN_USERNAME` / `SKVM_ADMIN_PASSWORD` | `admin` / random | First-run admin only |
+| `SKVM_ADMIN_USERNAME` / `SKVM_ADMIN_PASSWORD` | `admin` / `admin123` | First-run admin only — change `admin123` immediately |
 | `SKVM_COOKIE_SECURE` / `SKVM_TRUST_PROXY` | `false` | Enable behind HTTPS / a reverse proxy |
 | `SKVM_ALLOW_REGISTRATION` | `true` | Public sign-ups (also toggleable in Admin) |
 
-Branding, plans, OS images, maintenance mode and quotas are runtime settings managed in **Admin → Overview**, stored in the database — no code changes needed.
+Branding, plans, OS images, maintenance mode and quotas are runtime settings managed in **Admin → Control Room**, stored in the database — no code changes needed.
 
 ## Project layout
 
