@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block heading %}Plans{% endblock %}
+{% block eyebrow %}ADMINISTRATION{% endblock %}
+{% block content %}
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="plus"></i> Create plan</h2><p>Plans cap what users can deploy; enforcement is server-side.</p></div></div>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="op" value="create">
+    <label>Name<input name="name" required placeholder="e.g. Pro"></label>
+    <label>Max vCPU<input type="number" name="max_vcpus" value="2" min="1" max="64"></label>
+    <label>Max RAM (MiB)<input type="number" name="max_memory_mb" value="2048" min="512"></label>
+    <label>Max disk (GiB)<input type="number" name="max_disk_gb" value="25" min="5"></label>
+    <label>Max VPS<input type="number" name="max_vps" value="1" min="0"></label>
+    <button class="btn btn-primary" type="submit">Create plan</button>
+  </form>
+</section>
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="layers"></i> Plans</h2></div></div>
+  {% for p in plans %}
+  <form method="post" class="table-row-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <label>Name<input name="name" value="{{ p.name }}"></label>
+      <label>Max vCPU<input type="number" name="max_vcpus" value="{{ p.max_vcpus }}" min="1"></label>
+      <label>Max RAM (MiB)<input type="number" name="max_memory_mb" value="{{ p.max_memory_mb }}" min="512"></label>
+      <label>Max disk (GiB)<input type="number" name="max_disk_gb" value="{{ p.max_disk_gb }}" min="5"></label>
+      <label>Max VPS<input type="number" name="max_vps" value="{{ p.max_vps }}" min="0"></label>
+      <label class="check"><input type="checkbox" name="enabled" {% if p.enabled %}checked{% endif %}> enabled</label>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-small" name="op" value="save:{{ p.id }}" type="submit">Save</button>
+      <button class="btn btn-small btn-danger" name="op" value="delete:{{ p.id }}" type="submit" onclick="return confirm('Delete plan {{ p.name }}?')">Delete</button>
+    </div>
+  </form>
+  {% else %}<div class="empty">No plans.</div>{% endfor %}
+</section>
+{% endblock %}

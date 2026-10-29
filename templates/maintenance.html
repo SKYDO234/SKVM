@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maintenance · {{ brand.site_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}"></head>
+<body><div class="auth-wrap"><div class="auth-card glass center">
+<span class="brand-mark mx-auto"><i data-lucide="wrench"></i></span>
+<h2>Under maintenance</h2>
+<p class="muted">{{ brand.site_name }} is temporarily unavailable while we perform maintenance. Please try again shortly.</p>
+<a class="btn" href="{{ url_for('login') }}">Admin login</a>
+</div></div>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>if (window.lucide) lucide.createIcons();</script></body></html>

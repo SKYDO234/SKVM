@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ vps.name }} · {{ brand.site_name }} Console</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg-root:#0a0a0c;--bg-surface:#121216;--bg-elevated:#1a1a20;--bg-hover:#22222a;--border-subtle:#26262e;--border-medium:#33333e;--text-primary:#e8e8ed;--text-secondary:#a0a0b0;--text-muted:#6b6b7a;--accent:{{ brand.accent }};--accent-glow:rgba(124,106,255,.25);--success:#2ecc71;--success-glow:rgba(46,204,113,.3);--warning:#f0b34b;--danger:#e74c5a;--radius-sm:6px;--radius-md:10px}
+  html,body{height:100%;background:var(--bg-root);font-family:'Inter',system-ui,sans-serif;overflow:hidden;color:var(--text-primary);-webkit-font-smoothing:antialiased}
+  .app{display:flex;flex-direction:column;height:100vh;width:100vw}
+  .titlebar{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 14px;background:var(--bg-surface);border-bottom:1px solid var(--border-subtle);flex-shrink:0;user-select:none}
+  .titlebar-left{display:flex;align-items:center;gap:8px;min-width:0}
+  .tab{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--bg-elevated);border-radius:var(--radius-md);font-weight:500;font-size:12.5px;border:1px solid var(--border-subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tab .dot{width:8px;height:8px;border-radius:50%;background:#3a3a44;flex-shrink:0}
+  .tab.connected .dot{background:var(--success);box-shadow:0 0 12px var(--success-glow),0 0 4px var(--success)}
+  .back-link{color:var(--text-secondary);text-decoration:none;font-size:12px;padding:6px 10px;border-radius:var(--radius-sm)}
+  .back-link:hover{background:var(--bg-hover);color:var(--text-primary)}
+  .titlebar-right{display:flex;align-items:center;gap:8px}
+  .status-indicator{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;color:var(--text-muted);padding:5px 12px;background:var(--bg-root);border-radius:20px;border:1px solid var(--border-subtle)}
+  .status-indicator.connected{border-color:rgba(46,204,113,.3);color:#9bffc5;background:rgba(46,204,113,.06)}
+  .tb-btn{display:flex;align-items:center;gap:7px;padding:6px 14px;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;white-space:nowrap}
+  .tb-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary)}
+  .tb-btn:disabled{opacity:.35;cursor:not-allowed}
+  .tb-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;box-shadow:0 0 20px var(--accent-glow)}
+  .terminal-host{flex:1;padding:8px 10px;background:var(--bg-root);overflow:hidden;position:relative}
+  #terminal{width:100%;height:100%;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border-subtle);box-shadow:inset 0 0 40px rgba(0,0,0,.4)}
+  .statusbar{display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 14px;background:var(--bg-surface);border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-muted);flex-shrink:0}
+  .statusbar-left{display:flex;gap:18px}
+  .sb-item{display:flex;align-items:center;gap:6px}
+  .toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-elevated);border:1px solid var(--border-medium);border-radius:var(--radius-md);padding:11px 18px;font-size:12.5px;box-shadow:0 8px 32px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:all .25s;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:var(--border-medium);border-radius:4px}
+  @media(max-width:720px){.tb-btn span{display:none}.status-indicator{display:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="titlebar">
+    <div class="titlebar-left">
+      <a class="back-link" href="{{ url_for('vps_detail', vps_id=vps.id) }}">← {{ vps.name }}</a>
+      <div class="tab" id="tabBox"><span class="dot"></span><span id="tabTitle">root@{{ vps.hostname }} — {{ brand.site_name }} Console</span></div>
+    </div>
+    <div class="titlebar-right">
+      <div class="status-indicator" id="statusIndicator"><span id="statusText">Connecting…</span></div>
+      <button class="tb-btn" id="clearBtn" title="Clear terminal (Ctrl+Shift+L)">🧹 <span>Clear</span></button>
+      <button class="tb-btn" id="disconnectBtn" disabled>⏏ <span>Disconnect</span></button>
+      <button class="tb-btn primary" id="connectBtn" disabled>↻ <span>Reconnect</span></button>
+    </div>
+  </div>
+  <div class="terminal-host"><div id="terminal"></div></div>
+  <div class="statusbar">
+    <div class="statusbar-left">
+      <div class="sb-item"><span id="sbSessionText">No session</span></div>
+      <div class="sb-item"><span>Latency&nbsp;<b id="sbLatencyText">—</b></span></div>
+      <div class="sb-item"><span>{{ vps.backend }} · {{ vps.os_slug }}</span></div>
+    </div>
+    <div class="sb-item"><span>{{ brand.site_name }} · xterm.js + Socket.IO</span></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/socket.io-client@4.7.5/dist/socket.io.min.js"></script>
+<script>
+(function(){
+  'use strict';
+  var VPS_ID = {{ vps.id }};
+  var VPS_STATE = {{ vps.state|tojson }};
+  function $(id){ return document.getElementById(id); }
+  var toastTimer=null;
+  function toast(msg){ var el=$('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer=setTimeout(function(){el.classList.remove('show');},3600); }
+
+  if (typeof Terminal === 'undefined') {
+    document.querySelector('.terminal-host').innerHTML = '<div style="padding:28px;color:#a0a0b0">Terminal library failed to load (xterm.js CDN unreachable). Check your connection and reload.</div>';
+    return;
+  }
+  var term = new Terminal({
+    cursorBlink:true, cursorStyle:'block',
+    fontFamily:"'JetBrains Mono','Consolas','Fira Code',monospace", fontSize:14, lineHeight:1.25,
+    scrollback:8000, convertEol:true, allowProposedApi:true, smoothScrollDuration:80,
+    theme:{ background:'#0a0a0c', foreground:'#d8d8e0', cursor:'#b8aaff', cursorAccent:'#0a0a0c',
+      selectionBackground:'#3a2d6e', selectionForeground:'#ffffff',
+      black:'#1a1a20', red:'#f07178', green:'#7ec699', yellow:'#f0c674', blue:'#82aaff',
+      magenta:'#c792ea', cyan:'#7fdbca', white:'#d8d8e0', brightBlack:'#5c5c6e',
+      brightRed:'#ff8b92', brightGreen:'#9dffb0', brightYellow:'#ffe08a', brightBlue:'#a4c2ff',
+      brightMagenta:'#e0aaff', brightCyan:'#a0f0e0', brightWhite:'#ffffff' }
+  });
+  var fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  if (typeof WebLinksAddon !== 'undefined') term.loadAddon(new WebLinksAddon.WebLinksAddon());
+  term.open($('terminal'));
+  setTimeout(function(){ try{fitAddon.fit();}catch(e){} }, 60);
+  window.addEventListener('resize', function(){ try{fitAddon.fit();}catch(e){} });
+
+  term.writeln('\x1b[1;38;5;141m╭──────────────────────────────────────────╮\x1b[0m');
+  term.writeln('\x1b[1;38;5;141m│\x1b[0m  \x1b[1;97m{{ brand.site_name }}\x1b[0m  \x1b[38;5;245m— Live Console\x1b[0m');
+  term.writeln('\x1b[1;38;5;141m╰──────────────────────────────────────────╯\x1b[0m');
+  term.writeln('');
+
+  if (VPS_STATE !== 'running') {
+    term.writeln('\x1b[33mThis VPS is "' + VPS_STATE + '". Start it from the dashboard, then reopen the console.\x1b[0m');
+  }
+
+  var socket = null, latencyTimer = null;
+  function setStatus(connected, label){
+    $('statusText').textContent = label;
+    $('statusIndicator').classList.toggle('connected', connected);
+    $('tabBox').classList.toggle('connected', connected);
+    $('disconnectBtn').disabled = !connected;
+    $('connectBtn').disabled = connected;
+    $('sbSessionText').textContent = connected ? ('Session: root@{{ vps.hostname }}') : 'No session';
+    if (!connected) $('sbLatencyText').textContent = '—';
+  }
+  function measureLatency(){
+    if (!socket || !socket.connected) return;
+    var t0 = Date.now();
+    socket.emit('ping_console', {}, function(){ $('sbLatencyText').textContent = (Date.now()-t0) + ' ms'; });
+  }
+  function connect(){
+    if (socket) { try{socket.disconnect();}catch(e){} }
+    setStatus(false, 'Connecting…');
+    socket = io('/console', { query: { vps_id: VPS_ID }, transports: ['websocket','polling'] });
+    socket.on('connect', function(){
+      setStatus(true, 'Connected');
+      toast('Connected to {{ vps.name }}');
+      term.focus();
+      try{ socket.emit('resize', {cols: term.cols, rows: term.rows}); }catch(e){}
+      clearInterval(latencyTimer); latencyTimer = setInterval(measureLatency, 3000); measureLatency();
+    });
+    socket.on('output', function(data){ term.write(data); });
+    socket.on('disconnect', function(){ setStatus(false, 'Disconnected'); clearInterval(latencyTimer); });
+    socket.on('connect_error', function(err){ setStatus(false, 'Connection failed'); term.writeln('\r\n\x1b[31mCould not open console: ' + err.message + '\x1b[0m'); });
+  }
+  term.onData(function(data){ if (socket && socket.connected) socket.emit('input', {data: data}); });
+  term.onResize(function(size){ if (socket && socket.connected) socket.emit('resize', {cols: size.cols, rows: size.rows}); });
+  $('clearBtn').addEventListener('click', function(){ term.clear(); term.focus(); });
+  $('disconnectBtn').addEventListener('click', function(){ if(socket) socket.disconnect(); term.writeln('\r\n\x1b[33mDisconnected by user.\x1b[0m'); });
+  $('connectBtn').addEventListener('click', connect);
+  document.addEventListener('keydown', function(e){ if(e.ctrlKey && e.shiftKey && (e.key==='L'||e.key==='l')){ e.preventDefault(); term.clear(); } });
+  $('terminal').addEventListener('click', function(){ term.focus(); });
+  if (VPS_STATE === 'running') connect(); else setStatus(false, 'VPS not running');
+})();
+</script>
+</body>
+</html>

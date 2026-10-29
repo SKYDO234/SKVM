@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block heading %}All VPS{% endblock %}
+{% block eyebrow %}ADMINISTRATION{% endblock %}
+{% block content %}
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="plus-circle"></i> Create VPS for a user</h2><p>Admins may allocate beyond plan caps (sanity limits still apply). Provisioning is queued to the worker.</p></div></div>
+  <form method="post" action="{{ url_for('admin_create_vps') }}" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>Owner<select name="user_id" required>{% for u in users %}<option value="{{ u.id }}">{{ u.username }}</option>{% endfor %}</select></label>
+    <label>Name<input name="name" required pattern="[a-z0-9-]{3,55}" placeholder="srv-1"></label>
+    <label>OS<select name="os">{% for img in os_images %}<option value="{{ img.slug }}">{{ img.label }}</option>{% endfor %}</select></label>
+    <label>Plan (record)<select name="plan_id"><option value="">—</option>{% for p in plans %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+    <label>Engine<select name="engine"><option value="container">Container</option><option value="vm">VM (Incus/KVM)</option></select></label>
+    {% if nodes|length > 1 %}<label>Node<select name="node_id">{% for n in nodes %}<option value="{{ n.id }}">{{ n.name }}</option>{% endfor %}</select></label>{% endif %}
+    <label>vCPU<input type="number" name="vcpus" value="2" min="1" max="64"></label>
+    <label>RAM (MiB)<input type="number" name="memory" value="2048" min="512"></label>
+    <label>Disk (GiB)<input type="number" name="disk" value="25" min="5"></label>
+    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Queue provisioning</button>
+  </form>
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="server-cog"></i> All virtual servers</h2></div></div>
+  {% if vps %}<div class="table-wrap"><table class="table"><thead><tr><th>VPS</th><th>Owner</th><th>State</th><th>Resources (editable)</th><th>Actions</th></tr></thead><tbody>
+  {% for v in vps %}
+  <tr>
+    <td><a href="{{ url_for('vps_detail', vps_id=v.id) }}"><b>{{ v.name }}</b></a><br><small>{{ v.os_slug }} · {{ v.backend }} · {{ v.ip_address or 'no IP' }}</small></td>
+    <td>{{ v.owner.username if v.owner else v.user_id }}</td>
+    <td><span class="badge badge-{{ v.state }}">{{ v.state }}</span>{% if v.last_error %}<br><small class="err">{{ v.last_error[:120] }}</small>{% endif %}</td>
+    <td><form method="post" action="{{ url_for('admin_vps_resources', vps_id=v.id) }}" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="number" name="vcpus" value="{{ v.vcpus }}" min="1" title="vCPU"><input type="number" name="memory" value="{{ v.memory_mb }}" min="512" title="RAM MiB"><input type="number" name="disk" value="{{ v.disk_gb }}" min="5" title="Disk GiB">
+      <button class="btn btn-small" type="submit">Apply</button></form></td>
+    <td><div class="flex gap-2">
+      <a class="btn btn-small" href="{{ url_for('vps_console', vps_id=v.id) }}">Console</a>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" onsubmit="return confirm('Delete {{ v.name }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="from_admin" value="1">
+        <button class="btn btn-small btn-danger" type="submit">Delete</button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" onsubmit="return confirm('FORCE delete {{ v.name }} record even if backend cleanup fails?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="from_admin" value="1"><input type="hidden" name="force" value="1">
+        <button class="btn btn-small" type="submit">Force</button></form>
+    </div></td>
+  </tr>
+  {% endfor %}
+  </tbody></table></div>{% else %}<div class="empty">No VPS records.</div>{% endif %}
+</section>
+{% endblock %}

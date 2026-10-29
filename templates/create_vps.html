@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block heading %}Create VPS{% endblock %}
+{% block eyebrow %}DEPLOY{% endblock %}
+{% block content %}
+<section class="card glass max-w-3xl">
+  <div class="card-head"><div><h2><i data-lucide="rocket"></i> Deploy a new VPS</h2>
+  <p>Limits are enforced on the server against your plan and the node's real capacity. Provisioning runs in the background with live progress.</p></div></div>
+
+  {% if not plans or not os_images %}
+  <div class="flash flash-warning">No plans or OS images are currently enabled. Please contact an administrator.</div>
+  {% else %}
+  <form method="post" action="{{ url_for('create_vps') }}" class="form-grid" id="createForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="full">Server name
+      <input name="name" pattern="[a-z0-9-]{3,55}" required placeholder="e.g. web-1" autocomplete="off">
+      <small>Lowercase letters, digits and hyphens (3–55). Becomes the hostname.</small></label>
+    <label>Plan
+      <select name="plan_id" id="planSelect" required>
+        {% for p in plans %}<option value="{{ p.id }}" data-cpu="{{ p.max_vcpus }}" data-mem="{{ p.max_memory_mb }}" data-disk="{{ p.max_disk_gb }}" {% if plan and p.id==plan.id %}selected{% endif %}>{{ p.name }} — {{ p.max_vcpus }} vCPU · {{ p.max_memory_mb }} MiB · {{ p.max_disk_gb }} GiB</option>{% endfor %}
+      </select></label>
+    <label>Operating system
+      <select name="os" required>
+        {% for img in os_images %}<option value="{{ img.slug }}" {% if img.slug=='ubuntu-22.04' %}selected{% endif %}>{{ img.label }}</option>{% endfor %}
+      </select></label>
+    <label>Engine
+      <select name="engine"><option value="container">Container (fast, lightweight)</option><option value="vm">Virtual machine (Incus/QEMU — needs KVM node)</option></select>
+      <small>VMs are only offered on Incus nodes with KVM; the server validates this.</small></label>
+    {% if nodes|length > 1 %}
+    <label>Node
+      <select name="node_id">{% for n in nodes %}<option value="{{ n.id }}">{{ n.name }} ({{ n.backend }})</option>{% endfor %}</select></label>
+    {% endif %}
+    <label>vCPU <input type="number" name="vcpus" id="inCpu" min="1" max="64" value="{{ default_vcpus }}" required></label>
+    <label>RAM (MiB) <input type="number" name="memory" id="inMem" min="512" max="262144" step="256" value="{{ default_memory }}" required></label>
+    <label>Disk (GiB) <input type="number" name="disk" id="inDisk" min="5" max="4096" value="{{ default_disk }}" required></label>
+    <p class="muted full" id="planHint"></p>
+    <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Deploy VPS</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(function(){
+  var sel = document.getElementById('planSelect'); if(!sel) return;
+  var hint = document.getElementById('planHint');
+  function sync(){
+    var o = sel.options[sel.selectedIndex];
+    var cpu=+o.dataset.cpu, mem=+o.dataset.mem, disk=+o.dataset.disk;
+    ['inCpu','inMem','inDisk'].forEach(function(id){ document.getElementById(id).max = id==='inCpu'?cpu:(id==='inMem'?mem:disk); });
+    hint.textContent = 'Plan limits: up to ' + cpu + ' vCPU · ' + mem + ' MiB RAM · ' + disk + ' GiB disk. The server enforces these even if the form is bypassed.';
+  }
+  sel.addEventListener('change', sync); sync();
+})();
+</script>
+{% endblock %}

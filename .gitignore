@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+data/
+*.db
+*.db-wal
+*.db-shm
+first_admin_credentials.txt
+.secret_key
+.node_token

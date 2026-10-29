@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block heading %}OS Images{% endblock %}
+{% block eyebrow %}ADMINISTRATION{% endblock %}
+{% block content %}
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="plus"></i> Add OS image</h2><p>Map one logical OS to its Incus and Docker images. Disabled images cannot be deployed.</p></div></div>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="op" value="create">
+    <label>Slug<input name="slug" required placeholder="ubuntu-22.04"></label>
+    <label>Label<input name="label" required placeholder="Ubuntu 22.04 LTS"></label>
+    <label>Incus image<input name="incus_image" required placeholder="images:ubuntu/22.04"></label>
+    <label>Docker image<input name="docker_image" required placeholder="ubuntu:22.04"></label>
+    <label>Family<select name="family"><option value="debian">debian (Ubuntu/Debian)</option></select></label>
+    <button class="btn btn-primary" type="submit">Add image</button>
+  </form>
+</section>
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="disc-3"></i> Images</h2></div></div>
+  {% for img in images %}
+  <form method="post" class="table-row-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <label>Slug<input value="{{ img.slug }}" disabled></label>
+      <label>Label<input name="label" value="{{ img.label }}"></label>
+      <label>Incus image<input name="incus_image" value="{{ img.incus_image }}"></label>
+      <label>Docker image<input name="docker_image" value="{{ img.docker_image }}"></label>
+      <label>Family<input name="family" value="{{ img.family }}"></label>
+      <label class="check"><input type="checkbox" name="enabled" {% if img.enabled %}checked{% endif %}> enabled</label>
+    </div>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-small" name="op" value="save:{{ img.id }}" type="submit">Save</button>
+      <button class="btn btn-small btn-danger" name="op" value="delete:{{ img.id }}" type="submit" onclick="return confirm('Delete image {{ img.slug }}?')">Delete</button>
+    </div>
+  </form>
+  {% else %}<div class="empty">No OS images.</div>{% endfor %}
+</section>
+{% endblock %}

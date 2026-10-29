@@ -1,0 +1,11 @@
+[Unit]
+Description=Run SKVM reconciliation every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+Persistent=true
+Unit=skvm-watchdog.service
+
+[Install]
+WantedBy=timers.target

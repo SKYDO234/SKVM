@@ -1,0 +1,22 @@
+[Unit]
+Description=SKVM PANEL Node Agent (private, 127.0.0.1:5556)
+After=network-online.target docker.service incus.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skvm-panel
+Group=skvm-panel
+WorkingDirectory=/opt/skvm-panel
+Environment=PYTHONPATH=/opt/skvm-panel
+EnvironmentFile=-/etc/skvm-panel/skvm.env
+ExecStart=/opt/skvm-panel/venv/bin/gunicorn --workers 1 --threads 2 --timeout 120 --bind 127.0.0.1:5556 node:app
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/skvm-panel /etc/skvm-panel
+
+[Install]
+WantedBy=multi-user.target

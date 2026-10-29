@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block heading %}Jobs &amp; Logs{% endblock %}
+{% block eyebrow %}ADMINISTRATION{% endblock %}
+{% block content %}
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="loader"></i> Provisioning jobs</h2><p>Failures include the real backend error message. Check the failing step, fix the node (Docker/Incus/KVM), then ask the user to retry — failed instances are cleaned up automatically.</p></div></div>
+  {% if jobs %}<div class="table-wrap"><table class="table"><thead><tr><th>Job</th><th>VPS</th><th>Status</th><th>Progress</th><th>Message</th><th>Attempts</th><th>Updated</th></tr></thead>
+  <tbody>{% for j in jobs %}<tr><td>#{{ j.id }} {{ j.kind }}</td><td>{{ j.vps_id }}</td><td><span class="badge badge-{{ j.status }}">{{ j.status }}</span></td><td>{{ j.progress }}%</td><td>{{ j.message }}</td><td>{{ j.attempts }}</td><td>{{ j.updated_at }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">No jobs.</div>{% endif %}
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="scroll-text"></i> Audit log</h2><p>Authentication, VPS lifecycle and admin actions.</p></div></div>
+  {% if audit %}<div class="table-wrap"><table class="table"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Target</th><th>Detail</th><th>IP</th></tr></thead>
+  <tbody>{% for a in audit %}<tr><td>{{ a.created_at }}</td><td>{{ a.username or '—' }}</td><td>{{ a.action }}</td><td>{{ a.target }}</td><td>{{ a.detail }}</td><td>{{ a.ip }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">No audit entries yet.</div>{% endif %}
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="file-text"></i> Application log</h2><p>Tail of <code>data/skvm.log</code> when file logging is configured; otherwise use <code>journalctl -u skvm-panel -u skvm-jobs</code> on the node.</p></div></div>
+  {% if log_text %}<pre class="console-box">{{ log_text }}</pre>{% else %}<div class="empty">No log file found at data/skvm.log. On systemd installs, run: journalctl -u skvm-panel -u skvm-jobs -n 200</div>{% endif %}
+</section>
+{% endblock %}
