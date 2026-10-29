@@ -28,6 +28,17 @@ SKVM's database schema (`users`, `nodes`, `vps`, `jobs`, `settings`, plus `plans
 
 ---
 
+## Install in GitHub Codespaces (and other containers)
+
+`install.sh` works there too — it auto-detects Codespaces/rigbox/CodeSandbox/Gitpod (no systemd) and switches to container mode (no root, no systemd, user-space install via `run.sh`):
+
+```bash
+bash install.sh                # foreground (Ctrl+C stops panel + worker)
+bash install.sh --background   # install + start detached, prints login/log commands
+```
+
+Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Login afterwards: `grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env`, then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*).
+
 ## Install (production, systemd host)
 
 ```bash

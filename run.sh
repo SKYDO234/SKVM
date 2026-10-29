@@ -131,7 +131,7 @@ PYEOF
 echo "[skvm] Starting provisioning worker (log: $DATA_DIR/worker.log)..."
 "$VPY" job_runner.py >>"$DATA_DIR/worker.log" 2>&1 &
 WORKER_PID=$!
-cleanup() { kill "$WORKER_PID" 2>/dev/null || true; }
+cleanup() { kill "$WORKER_PID" "${PANEL_PID:-}" 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
 cat <<EOF
@@ -145,4 +145,6 @@ cat <<EOF
  Stop:     Ctrl+C
 ------------------------------------------------------------
 EOF
-venv/bin/gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app
+venv/bin/gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app &
+PANEL_PID=$!
+wait "$PANEL_PID"

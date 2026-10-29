@@ -30,4 +30,7 @@ trap 'kill "$WORKER_PID" 2>/dev/null || true' EXIT INT TERM
 
 PORT="${SKVM_PORT:-5555}"
 echo "[skvm] SKVM PANEL on 0.0.0.0:$PORT (worker pid $WORKER_PID)"
-gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app
+gunicorn --worker-class eventlet --workers 1 --bind "0.0.0.0:$PORT" --timeout 120 app:app &
+PANEL_PID=$!
+trap 'kill "$WORKER_PID" "$PANEL_PID" 2>/dev/null || true' EXIT INT TERM
+wait "$PANEL_PID"

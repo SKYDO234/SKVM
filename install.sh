@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
-# SKVM PANEL installer — Debian/Ubuntu (apt) and RHEL-family (dnf), systemd hosts.
+# SKVM PANEL installer — Debian/Ubuntu (apt) and RHEL-family (dnf).
 #
 #   sudo bash install.sh [--backend docker|incus|both] [--noninteractive]
+#   bash install.sh [--container] [--background]   # Codespaces/containers
 #
+# Two install modes:
+#   systemd   (default on real Linux servers): services in /opt/skvm-panel,
+#             requires root + a running systemd.
+#   container (auto-detected in GitHub Codespaces, rigbox, CodeSandbox,
+#             Gitpod and any environment without systemd): delegates to
+#             run.sh — user-space venv install, auto-generated SECRET_KEY
+#             + admin credentials in .env, panel + worker on port 5555.
 # Default backend is Docker (installed + validated).
 # Incus can be installed alongside Docker with --backend both.
 # The installer auto-generates SECRET_KEY and first-admin credentials
@@ -20,26 +28,103 @@ DATA_DIR="/var/lib/skvm-panel"
 CONF_DIR="/etc/skvm-panel"
 BACKEND="docker"
 PORT="${SKVM_PORT:-5555}"
+INSTALL_MODE="${SKVM_INSTALL_MODE:-auto}"   # auto | systemd | container
+BACKGROUND=0
 
-for arg in "$@"; do
-  case "$arg" in
-    --backend=*) BACKEND="${arg#*=}" ;;
-    --backend) shift; BACKEND="${1:-docker}" ;;
-    --noninteractive|-y) ;;
-    --port=*) PORT="${arg#*=}" ;;
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --backend=*) BACKEND="${1#*=}"; shift ;;
+    --backend) BACKEND="${2:-docker}"; shift 2 ;;
+    --noninteractive|-y) shift ;;
+    --port=*) PORT="${1#*=}"; shift ;;
+    --container) INSTALL_MODE="container"; shift ;;
+    --systemd) INSTALL_MODE="systemd"; shift ;;
+    --background) BACKGROUND=1; shift ;;
     --help)
       cat <<EOF
 SKVM PANEL installer
-Usage: sudo bash install.sh [--backend docker|incus|both] [--port 5555] [--noninteractive]
+Usage:
+  sudo bash install.sh [--backend docker|incus|both] [--port 5555]   (systemd servers)
+  bash install.sh [--container] [--background]                       (Codespaces/containers)
+Force a mode with --systemd or --container (or SKVM_INSTALL_MODE=...).
 EOF
       exit 0 ;;
-    *) echo "Unknown argument: $arg (try --help)"; exit 2 ;;
+    *) echo "Unknown argument: $1 (try --help)"; exit 2 ;;
   esac
 done
 case "$BACKEND" in docker|incus|both) ;; *) echo "--backend must be docker, incus or both"; exit 2 ;; esac
+case "$INSTALL_MODE" in auto|systemd|container) ;; *) echo "SKVM_INSTALL_MODE must be auto, systemd or container"; exit 2 ;; esac
 
-if [[ "$(id -u)" -ne 0 ]]; then echo "Run as root: sudo bash install.sh"; exit 1; fi
-if ! command -v systemctl >/dev/null 2>&1; then echo "systemd is required."; exit 1; fi
+# ------------------------------------------------------------- mode detect
+systemd_running() {
+  command -v systemctl >/dev/null 2>&1 && [[ -d /run/systemd/system ]] && systemctl is-system-running >/dev/null 2>&1
+}
+in_container_env() {
+  [[ -f /.dockerenv ]] || [[ -n "${CODESPACES:-}" ]] || [[ -n "${REMOTE_CONTAINERS:-}" ]] \
+    || [[ -n "${GITPOD_WORKSPACE_ID:-}" ]] || [[ -n "${SKVM_CONTAINER:-}" ]]
+}
+if [[ "$INSTALL_MODE" == "auto" ]]; then
+  if systemd_running && ! in_container_env; then INSTALL_MODE="systemd"; else INSTALL_MODE="container"; fi
+fi
+
+install_container() {
+  echo "[SKVM] Codespace/container environment detected — using container install mode."
+  echo "[SKVM] (No systemd/root needed. For a systemd server, re-run with: sudo bash install.sh --systemd)"
+  cd "$APP_DIR"
+  if [[ "$BACKEND" == "incus" ]]; then
+    echo "[SKVM] NOTE: Incus/KVM cannot run inside most codespaces/containers; switching to the Docker backend."
+    export SKVM_BACKEND="docker"
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "[SKVM] python3 not found — trying to install it..."
+    if command -v apt-get >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-venv python3-pip || true
+    fi
+    command -v python3 >/dev/null 2>&1 || { echo "Install Python 3.10+ (e.g. sudo apt install python3 python3-venv), then re-run: bash install.sh"; exit 1; }
+  fi
+  if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" ]]; then
+    echo "[SKVM] Tip: you ran with sudo — files will be root-owned. Prefer: bash install.sh (no sudo) in codespaces/containers."
+  fi
+  if [[ "$BACKGROUND" -eq 1 ]]; then
+    mkdir -p data
+    echo "[SKVM] Starting SKVM in the background (log: $APP_DIR/data/skvm-run.log)..."
+    nohup bash run.sh >data/skvm-run.log 2>&1 &
+    echo $! > data/skvm-run.pid
+    for _ in $(seq 1 30); do
+      curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1 && break; sleep 1
+    done
+    if curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+      echo "[SKVM] Panel is UP on port $PORT."
+    else
+      echo "[SKVM] Panel is still starting — check: tail -f data/skvm-run.log"
+    fi
+    cat <<EOF
+------------------------------------------------------------
+ SKVM PANEL (container mode) installed + started
+ URL:      use your platform's forwarded port $PORT preview
+           (Codespaces: Ports panel -> 5555 -> Open in Browser)
+ Login:    grep -E '^(SKVM_ADMIN|SECRET_KEY)' .env
+ Logs:     tail -f data/skvm-run.log   (worker: data/worker.log)
+ Stop:     kill \$(cat data/skvm-run.pid)
+------------------------------------------------------------
+EOF
+    exit 0
+  fi
+  echo "[SKVM] Handing over to run.sh (panel + worker, Ctrl+C to stop)..."
+  exec bash run.sh
+}
+
+if [[ "$INSTALL_MODE" == "container" ]]; then
+  install_container
+fi
+
+# ------------------------------------------------------------ systemd mode
+if [[ "$(id -u)" -ne 0 ]]; then echo "Run as root: sudo bash install.sh (or use container mode: bash install.sh --container)"; exit 1; fi
+if ! systemd_running; then
+  echo "systemd is not running on this host, so systemd mode cannot install services."
+  echo "Use container mode instead:  bash install.sh --container   (or just: bash run.sh)"
+  exit 1
+fi
 
 echo "[SKVM] Installing SKVM PANEL (backend: $BACKEND, port: $PORT) from $APP_DIR"
 
