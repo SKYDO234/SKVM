@@ -37,7 +37,7 @@ bash install.sh                # foreground (Ctrl+C stops panel + worker)
 bash install.sh --background   # install + start detached, prints login/log commands
 ```
 
-Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Sign in as `admin` / `admin123` (change it immediately in Profile), then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*).
+Force a mode any time with `--container` or `--systemd` (`SKVM_INSTALL_MODE=container|systemd` also works). Sign in as `admin` / `admin123` (change it immediately in Profile), then open the forwarded **5555** preview (Codespaces: *Ports → 5555 → Open in Browser*). Hosted preview proxies (Codespaces/Gitpod/dev containers) are handled automatically — SKVM trusts their `X-Forwarded-Host`/`X-Forwarded-Proto` headers so the public preview URL passes the CSRF referrer check; you do **not** need to set `SKVM_TRUST_PROXY` there. (If you ever see *"Bad Request — The referrer does not match the host"* on login, update/restart the panel so this auto-detection is running.)
 
 ## Install (production, systemd host)
 
@@ -168,7 +168,8 @@ All configuration is via `SKVM_*` environment variables (`.env` locally, `/etc/s
 | `SKVM_BACKEND` | `auto` | `auto` · `docker` · `incus` |
 | `SKVM_DB` | `data/skvm.db` | SQLite database path |
 | `SKVM_ADMIN_USERNAME` / `SKVM_ADMIN_PASSWORD` | `admin` / `admin123` | First-run admin only — change `admin123` immediately |
-| `SKVM_COOKIE_SECURE` / `SKVM_TRUST_PROXY` | `false` | Enable behind HTTPS / a reverse proxy |
+| `SKVM_COOKIE_SECURE` | `false` | Enable behind HTTPS |
+| `SKVM_TRUST_PROXY` | auto (on in Codespaces/Gitpod/dev containers) | Trust `X-Forwarded-*` from a reverse proxy / hosted preview; set explicitly `true`/`false` to override the auto-detection |
 | `SKVM_ALLOW_REGISTRATION` | `true` | Public sign-ups (also toggleable in Admin) |
 
 Branding, plans, OS images, maintenance mode and quotas are runtime settings managed in **Admin → Control Room**, stored in the database — no code changes needed.
