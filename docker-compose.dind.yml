@@ -1,0 +1,43 @@
+# SKVM PANEL - Docker-in-Docker mode.
+# For sandboxes that give you containers but no daemon socket and allow
+# privileged containers (some rigbox/dev boxes, self-hosted runners).
+# GitHub Codespaces users do NOT need this - the devcontainer already
+# enables Docker-in-Docker without a privileged compose service.
+#
+#   docker compose -f docker-compose.dind.yml up -d --build
+#   # panel: http://127.0.0.1:5555
+#
+# WARNING: the `dind` service is privileged (it is a full Docker daemon).
+# Never publish its port; it is only reachable on the internal network.
+services:
+  dind:
+    image: docker:dind
+    container_name: skvm-dind
+    privileged: true
+    restart: unless-stopped
+    environment:
+      DOCKER_TLS_CERTDIR: ""   # plain TCP on the private compose network only
+    volumes:
+      - dind-data:/var/lib/docker
+    # no ports published
+
+  panel:
+    build: .
+    image: skvm-panel:latest
+    container_name: skvm-panel
+    restart: unless-stopped
+    depends_on:
+      - dind
+    environment:
+      SKVM_PORT: "5555"
+      SKVM_ADMIN_USERNAME: "${SKVM_ADMIN_USERNAME:-admin}"
+      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-}"
+      DOCKER_HOST: "tcp://dind:2375"
+    ports:
+      - "5555:5555"
+    volumes:
+      - skvm-data:/data
+
+volumes:
+  dind-data:
+  skvm-data:

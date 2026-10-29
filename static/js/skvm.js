@@ -45,7 +45,7 @@
           box.querySelector('[data-k="ram"]').textContent = d.memory_used_mb + ' / ' + d.memory_total_mb + ' MiB';
           box.querySelector('[data-k="disk"]').textContent = d.disk_used_gb + ' / ' + d.disk_total_gb + ' GiB';
           box.querySelector('[data-k="backends"]').textContent =
-            'Docker: ' + (d.docker.available ? 'ready' : 'unavailable') + ' · Incus: ' + (d.incus.available ? 'ready' : 'unavailable');
+            (d.docker.runtime || 'docker') + ': ' + (d.docker.available ? 'ready' : 'unavailable') + ' · Incus: ' + (d.incus.available ? 'ready' : 'unavailable');
         })
         .catch(function () {});
     });

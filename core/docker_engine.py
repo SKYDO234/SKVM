@@ -1,7 +1,13 @@
-"""Docker backend for SKVM PANEL (Docker SDK for Python).
+"""Container backend for SKVM PANEL (Docker SDK for Python).
 
-Each VPS is one Docker container with hard CPU/memory limits applied by
-the daemon (nano_cpus / mem_limit). Disk quota uses overlay2
+Talks to a real Docker daemon or a Podman API-compatible socket
+(rootless Podman is the easiest way to run VPS containers inside
+Codespaces-style Linux containers). Endpoint resolution order:
+DOCKER_HOST env -> /var/run/docker.sock -> Podman sockets
+($XDG_RUNTIME_DIR/podman, /run/podman, /run/user/<uid>/podman).
+
+Each VPS is one container with hard CPU/memory limits applied by the
+daemon (nano_cpus / mem_limit). Disk quota uses overlay2
 `storage_opt.size` where the daemon supports it; when the storage driver
 cannot enforce a quota the provisioning job records that honestly in its
 details instead of pretending the limit exists.
@@ -10,8 +16,10 @@ All operations use the SDK (no shell), so user input can never become a
 host shell command.
 """
 from __future__ import annotations
+import os
 import re
 import time
+from pathlib import Path
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{2,54}$")
 
@@ -27,17 +35,48 @@ def safe_name(name: str) -> str:
     return name
 
 
+def resolve_endpoint() -> str:
+    """Return the container-runtime endpoint SKVM should talk to."""
+    env = (os.getenv("DOCKER_HOST") or "").strip()
+    if env:
+        return env
+    candidates = ["/var/run/docker.sock"]
+    xdg = os.getenv("XDG_RUNTIME_DIR")
+    if xdg:
+        candidates.append(str(Path(xdg) / "podman" / "podman.sock"))
+    candidates.append("/run/podman/podman.sock")
+    try:
+        candidates.append(f"/run/user/{os.getuid()}/podman/podman.sock")
+    except Exception:
+        pass
+    candidates.append(str(Path.home() / ".local" / "share" / "containers" / "podman.sock"))
+    for sock in candidates:
+        if Path(sock).exists():
+            return f"unix://{sock}"
+    return "unix:///var/run/docker.sock"
+
+
+def runtime_name(endpoint: str | None = None) -> str:
+    endpoint = endpoint or resolve_endpoint()
+    return "podman" if "podman" in endpoint else "docker"
+
+
 def _client():
     try:
         import docker
     except ImportError as exc:
         raise DockerEngineError("Docker SDK (pip package 'docker') is not installed") from exc
+    endpoint = resolve_endpoint()
     try:
-        client = docker.from_env(timeout=10)
+        client = docker.DockerClient(base_url=endpoint, timeout=10)
         client.ping()
         return client
     except Exception as exc:
-        raise DockerEngineError(f"Docker daemon is not available: {exc}") from exc
+        runtime = runtime_name(endpoint)
+        raise DockerEngineError(
+            f"Container runtime is not available at {endpoint} ({runtime}): {exc}. "
+            "Start Docker/Podman (or set DOCKER_HOST) and retry — nothing was created."
+        ) from exc
 
 
 def client_or_none():
@@ -85,15 +124,23 @@ def create_container(name, image, vcpus, memory_mb, disk_gb):
         # Keep the guest alive; sshd/tmate are started by provisioning.
         command=["/bin/bash", "-lc", "sleep infinity"],
     )
-    quota = False
-    try:
-        container = client.containers.run(storage_opt={"size": f"{int(disk_gb)}G"}, **kwargs)
-        quota = True
-    except Exception:
-        # Storage driver cannot enforce size (e.g. vfs / overlay2 without
-        # quota support): create without it and report truthfully.
-        container = client.containers.run(**kwargs)
-    return container.id, {"adopted": False, "disk_quota_enforced": quota}
+    # Progressive fallback for runtimes with fewer knobs (e.g. Podman
+    # compat API, vfs storage): quota first, then no-memswap. Every drop
+    # is reported honestly in the returned notes.
+    attempts = [
+        (dict(kwargs, storage_opt={"size": f"{int(disk_gb)}G"}), True),
+        (dict(kwargs), False),
+        ({k: v for k, v in kwargs.items() if k != "memswap_limit"}, False),
+    ]
+    last_exc = None
+    for attempt, quota in attempts:
+        try:
+            container = client.containers.run(**attempt)
+            return container.id, {"adopted": False, "disk_quota_enforced": quota,
+                                  "runtime": runtime_name()}
+        except Exception as exc:  # try the next, simpler shape
+            last_exc = exc
+    raise DockerEngineError(f"Container creation failed: {last_exc}")
 
 
 def _quota_of(container) -> bool:
@@ -231,11 +278,14 @@ def stats(name):
         cpu_delta = s["cpu_stats"]["cpu_usage"]["total_usage"] - s["precpu_stats"]["cpu_usage"]["total_usage"]
         sys_delta = s["cpu_stats"].get("system_cpu_usage", 0) - s["precpu_stats"].get("system_cpu_usage", 0)
         ncpu = s["cpu_stats"].get("online_cpus") or 1
-        cpu_percent = (cpu_delta / sys_delta * ncpu * 100.0) if sys_delta > 0 else 0.0
+        # Podman compat stats may lack a system delta; report None (unknown)
+        # rather than inventing 0%.
+        cpu_percent = (cpu_delta / sys_delta * ncpu * 100.0) if sys_delta > 0 else None
         mem = s.get("memory_stats") or {}
-        return {"state": "running", "cpu_percent": round(cpu_percent, 2),
+        return {"state": "running", "cpu_percent": (round(cpu_percent, 2) if cpu_percent is not None else None),
                 "memory_used_mb": round((mem.get("usage") or 0) / 1024 / 1024, 1),
                 "memory_limit_mb": round((mem.get("limit") or 0) / 1024 / 1024, 1),
-                "memory_percent": round((mem.get("usage", 0) / mem["limit"] * 100.0), 2) if mem.get("limit") else None}
+                "memory_percent": round((mem.get("usage", 0) / mem["limit"] * 100.0), 2) if mem.get("limit") else None,
+                "runtime": runtime_name()}
     except Exception as exc:
         return {"state": "running", "error": str(exc)[:300]}

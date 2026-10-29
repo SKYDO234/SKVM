@@ -22,7 +22,7 @@
 
 ## Stack
 
-Python 3 · Flask · Flask-Login · Flask-SQLAlchemy · Docker SDK for Python · Flask-SocketIO · xterm.js · Tailwind CSS · Lucide icons · python-dotenv · Gunicorn (eventlet worker) · SQLite (`skvm.db`) · systemd
+Python 3 · Flask · Flask-Login · Flask-SQLAlchemy · Docker SDK for Python (Docker + Podman runtimes) · Flask-SocketIO · xterm.js · Tailwind CSS · Lucide icons · python-dotenv · Gunicorn (eventlet worker) · SQLite (`skvm.db`) · systemd or `run.sh` anywhere
 
 SKVM's database schema (`users`, `nodes`, `vps`, `jobs`, `settings`, plus `plans`, `os_images`, `audit_logs`) upgrades older SKVM databases additively at startup — no destructive migrations.
 
@@ -96,6 +96,40 @@ server {
 ```
 
 Certificates: `certbot --nginx -d panel.example.com`, or use Caddy for automatic TLS.
+
+## Run anywhere — Codespaces, rigbox, CodeSandbox, any Linux container
+
+One command, no systemd, no root:
+
+```bash
+git clone https://github.com/SKYDO234/SKVM.git && cd SKVM
+bash run.sh        # sets up, starts panel + provisioning worker on 5555
+```
+
+`run.sh` creates the virtualenv, installs dependencies, initialises the
+database and first admin, auto-detects the container runtime (Docker
+socket → `dockerd` → rootless Podman), starts the provisioning worker,
+and serves the panel on **0.0.0.0:5555**. Forward port **5555** in your
+platform to get the preview URL. Set `SKVM_ADMIN_PASSWORD` as a platform
+secret before first run, or read `data/first_admin_credentials.txt` once.
+
+| Platform | Steps | VPS provisioning |
+|---|---|---|
+| **GitHub Codespaces** | [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/SKYDO234/SKVM) — or *Code → Codespaces → Create*. The included `.devcontainer` enables Docker-in-Docker, forwards 5555 with preview, and runs setup automatically. Then run the **“SKVM PANEL: Run”** VS Code task (or `bash run.sh`). | ✅ Real — Docker-in-Docker is enabled by the devcontainer |
+| **rigbox.dev** | Open a box, `git clone … && cd SKVM && bash run.sh`. If Docker/Podman isn't preinstalled, the launcher tries to start `dockerd`/rootless Podman itself. | ✅ When Docker or Podman is available/installable on the box |
+| **CodeSandbox** | Import the repo — `.codesandbox/tasks.json` installs deps and runs `bash run.sh` with a 5555 preview. CodeSandbox can also read the `.devcontainer`. | ✅ On VM-based devboxes with Docker; otherwise panel-only (see below) |
+| **Gitpod** | Open the repo — `.gitpod.yml` runs setup + `bash run.sh`, preview on 5555. | ✅ Gitpod workspaces include Docker |
+| **Any Docker host** | `docker compose up -d --build` (host socket mode) or `docker compose -f docker-compose.dind.yml up -d --build` (privileged DinD — isolated sandboxes only). First admin: `docker compose exec panel cat /data/first_admin_credentials.txt`. | ✅ Socket mode = sibling containers on the host daemon |
+| **Plain Linux VPS (systemd)** | `sudo bash install.sh` — see above. | ✅ Docker and/or Incus, incl. KVM VMs on Incus |
+
+**Honest limits:** a "VPS" here is a real Docker/Podman container (or
+Incus instance) with hard CPU/RAM limits — that requires a working
+container runtime. If a sandbox forbids Docker/Podman entirely (no
+daemon, no privileges), the panel still runs and every deploy reports
+the real "runtime not available" error instead of faking a server.
+Rootless Podman (`podman system service`) is auto-detected via
+`DOCKER_HOST`/socket paths, which covers many unprivileged containers
+where `dockerd` cannot run.
 
 ## Local development
 

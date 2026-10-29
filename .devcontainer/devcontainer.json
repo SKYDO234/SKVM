@@ -1,0 +1,30 @@
+{
+  "name": "SKVM PANEL",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "enableNonRootDocker": true,
+      "moby": true
+    },
+    "ghcr.io/devcontainers/features/node:1": {}
+  },
+  "forwardPorts": [5555],
+  "portsAttributes": {
+    "5555": {
+      "label": "SKVM PANEL",
+      "protocol": "http",
+      "onAutoForward": "openPreview",
+      "requireLocalPort": false
+    }
+  },
+  "postCreateCommand": "bash run.sh --setup-only",
+  "remoteEnv": {
+    "SKVM_PORT": "5555",
+    "SKVM_BACKEND": "docker"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}

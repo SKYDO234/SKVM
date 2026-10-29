@@ -43,12 +43,21 @@ def kvm_status():
 
 
 def docker_status():
-    """Real Docker daemon reachability via the Docker SDK (never faked)."""
-    info = {"installed": has_cmd("docker"), "available": False, "version": None,
-            "containers": None, "message": ""}
+    """Real container-runtime reachability via the Docker SDK (never faked).
+
+    Works against a Docker daemon or a Podman API socket (Codespaces /
+    rootless-container friendly). Reports runtime + endpoint so the UI can
+    show exactly what provisioning would talk to.
+    """
+    from core.docker_engine import resolve_endpoint, runtime_name
+    endpoint = resolve_endpoint()
+    info = {"installed": has_cmd("docker") or has_cmd("podman"), "available": False,
+            "version": None, "containers": None, "message": "",
+            "runtime": runtime_name(endpoint), "endpoint": endpoint,
+            "podman": has_cmd("podman")}
     try:
         import docker  # Docker SDK for Python
-        client = docker.from_env(timeout=4)
+        client = docker.DockerClient(base_url=endpoint, timeout=4)
         data = client.info()
         info["available"] = True
         info["version"] = (data.get("ServerVersion") or None)

@@ -1,0 +1,10 @@
+# Gitpod: docker is available in the workspace, so VPS provisioning works.
+tasks:
+  - name: SKVM PANEL
+    init: bash run.sh --setup-only
+    command: bash run.sh
+ports:
+  - port: 5555
+    onOpen: open-preview
+    name: SKVM PANEL
+    description: VPS hosting panel
