@@ -1,0 +1,13 @@
+{
+  "setupTasks": [
+    { "name": "Install SKVM dependencies", "command": "bash run.sh --setup-only" }
+  ],
+  "runTasks": [
+    {
+      "name": "SKVM PANEL",
+      "command": "bash run.sh",
+      "runAtStart": true,
+      "preview": { "port": 5555 }
+    }
+  ]
+}

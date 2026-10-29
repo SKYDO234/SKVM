@@ -1,0 +1,29 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SKVM PANEL: Run",
+      "detail": "Setup + start SKVM panel and provisioning worker on port 5555",
+      "type": "shell",
+      "command": "bash run.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "panel": "new", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "SKVM PANEL: Setup only",
+      "detail": "Create venv and install dependencies without starting",
+      "type": "shell",
+      "command": "bash run.sh --setup-only",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "SKVM PANEL: Tests",
+      "type": "shell",
+      "command": "venv/bin/python -m pytest tests/ -q",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}

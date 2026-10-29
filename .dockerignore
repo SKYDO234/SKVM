@@ -1,0 +1,15 @@
+.git
+venv
+.venv
+__pycache__
+*.pyc
+data
+*.db
+*.db-wal
+*.db-shm
+.env
+first_admin_credentials.txt
+.secret_key
+.node_token
+.devcontainer
+.vscode

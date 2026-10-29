@@ -1,0 +1,33 @@
+# SKVM PANEL - socket mode (recommended wherever a Docker/Podman daemon
+# already exists: normal Linux hosts, many rigbox/dev VMs).
+#
+#   docker compose up -d --build
+#   # panel: http://127.0.0.1:5555  (first admin: docker compose exec panel cat /data/first_admin_credentials.txt)
+#
+# The panel container mounts the HOST runtime socket, so each "VPS" it
+# creates is a sibling container on the host daemon with hard CPU/RAM
+# limits. Set DOCKER_SOCKET=/run/podman/podman.sock for rootful Podman,
+# or /run/user/1000/podman/podman.sock for rootless Podman.
+services:
+  panel:
+    build: .
+    image: skvm-panel:latest
+    container_name: skvm-panel
+    restart: unless-stopped
+    environment:
+      SKVM_PORT: "5555"
+      SKVM_ADMIN_USERNAME: "${SKVM_ADMIN_USERNAME:-admin}"
+      # Recommended: set in a local .env file (never commit it)
+      SKVM_ADMIN_PASSWORD: "${SKVM_ADMIN_PASSWORD:-}"
+      DOCKER_HOST: "unix:///var/run/docker.sock"
+    ports:
+      - "5555:5555"
+    volumes:
+      - skvm-data:/data
+      - "${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock"
+    # The panel needs socket write access; on multi-user hosts prefer
+    # adding the container user to the docker group instead of root.
+    # user: "0:0"  # default (root in container) - dev/single-admin hosts only
+
+volumes:
+  skvm-data:

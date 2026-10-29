@@ -52,7 +52,7 @@
     <div class="mini-stat"><small>Host CPU</small><b data-k="cpu">{{ caps.cpu_count }} cores · {{ caps.cpu_percent }}%</b></div>
     <div class="mini-stat"><small>Host RAM</small><b data-k="ram">{{ caps.memory_used_mb }} / {{ caps.memory_total_mb }} MiB</b></div>
     <div class="mini-stat"><small>Host disk</small><b data-k="disk">{{ caps.disk_used_gb }} / {{ caps.disk_total_gb }} GiB</b></div>
-    <div class="mini-stat"><small>Backends</small><b data-k="backends">Docker: {{ 'ready' if caps.docker.available else 'unavailable' }} · Incus: {{ 'ready' if caps.incus.available else 'unavailable' }}</b></div>
+    <div class="mini-stat"><small>Backends</small><b data-k="backends">{{ caps.docker.runtime|capitalize }} ({{ caps.docker.endpoint }}): {{ 'ready' if caps.docker.available else 'unavailable' }} · Incus: {{ 'ready' if caps.incus.available else 'unavailable' }}</b></div>
   </div>
 </section>
 {% endblock %}
