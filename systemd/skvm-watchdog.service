@@ -1,0 +1,12 @@
+[Unit]
+Description=SKVM PANEL VPS reconciliation watchdog
+After=skvm-panel.service skvm-jobs.service
+
+[Service]
+Type=oneshot
+User=skvm-panel
+Group=skvm-panel
+WorkingDirectory=/opt/skvm-panel
+Environment=PYTHONPATH=/opt/skvm-panel
+EnvironmentFile=-/etc/skvm-panel/skvm.env
+ExecStart=/opt/skvm-panel/scripts/skvm-watchdog.sh

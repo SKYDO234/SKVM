@@ -1,0 +1,4 @@
+Omega Panel V4 Stable
+Primary attribution: MrZetrix
+Original upstream/reference credit retained: NafiGamer — https://github.com/nafigamer0
+This release is a clean-source maintenance rebuild and does not execute the original obfuscated source.

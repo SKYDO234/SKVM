@@ -1,0 +1,22 @@
+[Unit]
+Description=SKVM PANEL Provisioning Worker
+After=network-online.target docker.service incus.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=skvm-panel
+Group=skvm-panel
+WorkingDirectory=/opt/skvm-panel
+Environment=PYTHONPATH=/opt/skvm-panel
+EnvironmentFile=-/etc/skvm-panel/skvm.env
+ExecStart=/opt/skvm-panel/venv/bin/python /opt/skvm-panel/job_runner.py
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/skvm-panel /etc/skvm-panel
+
+[Install]
+WantedBy=multi-user.target

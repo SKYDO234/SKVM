@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block heading %}Nodes{% endblock %}
+{% block eyebrow %}ADMINISTRATION{% endblock %}
+{% block content %}
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="heart-pulse"></i> This node (real host figures)</h2><p>CPU {{ caps.cpu_count }} cores · RAM {{ caps.memory_total_mb }} MiB · Disk {{ caps.disk_total_gb }} GiB · Docker {{ 'ready' if caps.docker.available else 'unavailable' }} · Incus {{ 'ready' if caps.incus.available else 'unavailable' }} · KVM {{ 'ready' if caps.kvm.ok else 'unavailable' }}</p></div></div>
+  <pre class="console-box">{{ caps|tojson(indent=2) }}</pre>
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="plus"></i> Add node record</h2><p>Remote nodes are managed via the token-authenticated node agent (node.py, default 127.0.0.1:5556). Keep agent ports private.</p></div></div>
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="op" value="create">
+    <label>Name<input name="name" required placeholder="node-2"></label>
+    <label>Host<input name="host" value="127.0.0.1" required></label>
+    <label>Agent port<input type="number" name="port" value="5556"></label>
+    <label>Backend<select name="backend"><option value="auto">auto</option><option value="incus">incus</option><option value="docker">docker</option></select></label>
+    <label>Node token<input name="token" placeholder="(auto-generated if empty)"></label>
+    <button class="btn btn-primary" type="submit">Add node</button>
+  </form>
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="network"></i> Nodes</h2></div></div>
+  {% for n in nodes %}
+  <form method="post" class="table-row-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-grid">
+      <label>Name<input name="name" value="{{ n.name }}"></label>
+      <label>Host<input name="host" value="{{ n.host }}"></label>
+      <label>Port<input type="number" name="port" value="{{ n.port }}"></label>
+      <label>Backend<select name="backend">{% for b in ['auto','incus','docker'] %}<option value="{{ b }}" {% if n.backend==b %}selected{% endif %}>{{ b }}</option>{% endfor %}</select></label>
+      <label>CPU cap (blank/UNL = unlimited)<input name="cpu_limit" value="{{ n.cpu_limit or '' }}" placeholder="UNL"></label>
+      <label>RAM cap MiB<input name="memory_limit_mb" value="{{ n.memory_limit_mb or '' }}" placeholder="UNL"></label>
+      <label>Disk cap GiB<input name="disk_limit_gb" value="{{ n.disk_limit_gb or '' }}" placeholder="UNL"></label>
+      <label class="check"><input type="checkbox" name="enabled" {% if n.enabled %}checked{% endif %}> enabled</label>
+    </div>
+    <small class="muted">Last seen: {{ n.last_seen or '—' }} · Token is stored server-side and never shown.</small>
+    <div class="flex gap-2 mt-2">
+      <button class="btn btn-small" name="op" value="save:{{ n.id }}" type="submit">Save</button>
+      <button class="btn btn-small btn-danger" name="op" value="delete:{{ n.id }}" type="submit" onclick="return confirm('Delete node {{ n.name }}?')">Delete</button>
+    </div>
+  </form>
+  {% else %}<div class="empty">No nodes.</div>{% endfor %}
+</section>
+{% endblock %}

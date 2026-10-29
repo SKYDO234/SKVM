@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block heading %}Profile{% endblock %}
+{% block eyebrow %}ACCOUNT{% endblock %}
+{% block content %}
+<div class="grid grid-2">
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="user-round"></i> Account</h2><p>Member since {{ current_user.created_at }} · Role: {{ current_user.role }}</p></div></div>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="form" value="email">
+    <label>Username<input value="{{ current_user.username }}" disabled></label>
+    <label>Email<input type="email" name="email" value="{{ current_user.email or '' }}" placeholder="you@example.com"></label>
+    <button class="btn btn-primary" type="submit"><i data-lucide="save"></i> Save profile</button>
+  </form>
+  <hr class="sep">
+  <h3 class="sub">Plan &amp; usage</h3>
+  <p class="muted">{% if plan %}Plan: <b class="text-white">{{ plan.name }}</b> ({{ plan.max_vcpus }} vCPU · {{ plan.max_memory_mb }} MiB · {{ plan.max_disk_gb }} GiB per VPS, up to {{ plan.max_vps }} VPS){% else %}No plan assigned — admin quota applies.{% endif %}</p>
+  <p class="muted mt-2">Currently: {{ usage.count }} VPS · {{ usage.vcpus }} vCPU · {{ usage.memory_mb }} MiB RAM · {{ usage.disk_gb }} GiB disk allocated. VPS quota: {{ current_user.max_vps }}.</p>
+  <div class="mt-3 flex gap-2 flex-wrap">
+    {% for v in my_vps %}<a class="btn btn-small" href="{{ url_for('vps_detail', vps_id=v.id) }}">{{ v.name }} ({{ v.state }})</a>{% endfor %}
+  </div>
+</section>
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="lock"></i> Change password</h2><p>Use at least 8 characters. Other sessions are not affected.</p></div></div>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="form" value="password">
+    <label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label>
+    <label>New password<input type="password" name="new_password" minlength="8" required autocomplete="new-password"></label>
+    <button class="btn btn-primary" type="submit"><i data-lucide="key-round"></i> Change password</button>
+  </form>
+</section>
+</div>
+{% endblock %}

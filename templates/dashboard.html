@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block heading %}Dashboard{% endblock %}
+{% block eyebrow %}OVERVIEW{% endblock %}
+{% block content %}
+<section class="grid grid-4">
+  <div class="metric glass"><small><i data-lucide="server"></i> Your VPS</small><b>{{ vps|length }}</b><span>{% if plan %}{{ plan.name }} plan · up to {{ plan.max_vps }}{% else %}quota: {{ current_user.max_vps }}{% endif %}</span></div>
+  <div class="metric glass"><small><i data-lucide="cpu"></i> Allocated vCPU</small><b>{{ usage.vcpus }}</b><span>across your servers</span></div>
+  <div class="metric glass"><small><i data-lucide="memory-stick"></i> Allocated RAM</small><b>{{ usage.memory_mb }} MiB</b><span>{{ usage.disk_gb }} GiB disk allocated</span></div>
+  <div class="metric glass"><small><i data-lucide="activity"></i> Node (host)</small><b>{{ caps.hostname }}</b><span>CPU {{ caps.cpu_percent }}% · RAM {{ caps.memory_percent }}% — host figures</span></div>
+</section>
+
+<div id="jobsBox">
+{% for j in jobs if j.status in ['queued','running'] %}
+<div class="card job-card" data-job="{{ j.id }}">
+  <div class="job-line"><b><i data-lucide="loader"></i> Provisioning job #{{ j.id }}</b><span class="job-message">{{ j.message }}</span><strong class="job-pct">{{ j.progress }}%</strong></div>
+  <div class="progress"><i style="width:{{ j.progress }}%"></i></div>
+</div>
+{% endfor %}
+</div>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="server"></i> Your virtual servers</h2><p>Real status from the virtualization backend. Start, stop, restart, open the console or manage access.</p></div>
+  <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> Create VPS</a></div>
+  {% if vps %}
+  <div class="vps-list">
+  {% for v in vps %}
+  <article class="vps-row">
+    <div class="vps-title"><span class="state state-{{ v.state }}"></span>
+      <div class="min-w-0"><a class="vps-name" href="{{ url_for('vps_detail', vps_id=v.id) }}">{{ v.name }}</a>
+      <small>{{ v.os_slug }} · {{ v.backend }}{% if v.engine=='vm' %} VM{% else %} container{% endif %} · {{ v.ip_address or 'IP pending' }}</small></div></div>
+    <div class="specs"><span title="vCPU"><i data-lucide="cpu"></i>{{ v.vcpus }}</span><span title="RAM"><i data-lucide="memory-stick"></i>{{ v.memory_mb }} MiB</span><span title="Disk"><i data-lucide="hard-drive"></i>{{ v.disk_gb }} GiB</span><span class="badge badge-{{ v.state }}">{{ v.state }}</span></div>
+    <div class="row-actions">
+      <a class="btn btn-small" href="{{ url_for('vps_detail', vps_id=v.id) }}"><i data-lucide="settings-2"></i> Manage</a>
+      <a class="btn btn-small" href="{{ url_for('vps_console', vps_id=v.id) }}"><i data-lucide="terminal"></i> Console</a>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='start') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Start"><i data-lucide="play"></i></button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='restart') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Restart"><i data-lucide="rotate-cw"></i></button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='stop') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Stop"><i data-lucide="square"></i></button></form>
+    </div>
+  </article>
+  {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><i data-lucide="server-off"></i><p>No VPS yet.</p><a class="btn btn-primary" href="{{ url_for('create_vps') }}">Create your first VPS</a></div>
+  {% endif %}
+</section>
+
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="heart-pulse"></i> Node health (host)</h2><p>These figures describe the physical/virtual host node — they are not your VPS usage.</p></div>
+  <button class="btn btn-small" id="refreshNode" type="button"><i data-lucide="refresh-cw"></i> Refresh</button></div>
+  <div class="grid grid-4" id="nodeStats">
+    <div class="mini-stat"><small>Host CPU</small><b data-k="cpu">{{ caps.cpu_count }} cores · {{ caps.cpu_percent }}%</b></div>
+    <div class="mini-stat"><small>Host RAM</small><b data-k="ram">{{ caps.memory_used_mb }} / {{ caps.memory_total_mb }} MiB</b></div>
+    <div class="mini-stat"><small>Host disk</small><b data-k="disk">{{ caps.disk_used_gb }} / {{ caps.disk_total_gb }} GiB</b></div>
+    <div class="mini-stat"><small>Backends</small><b data-k="backends">Docker: {{ 'ready' if caps.docker.available else 'unavailable' }} · Incus: {{ 'ready' if caps.incus.available else 'unavailable' }}</b></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>window.SKVM_JOBS = [{% for j in jobs if j.status in ['queued','running'] %}{{ j.id }},{% endfor %}];</script>
+{% endblock %}

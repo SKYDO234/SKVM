@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}{{ brand.site_name }} — VPS Hosting{% endblock %}
+{% block public %}
+<div class="public-wrap">
+  <header class="public-nav glass">
+    <a class="brand" href="{{ url_for('index') }}">
+      {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
+      {% else %}<span class="brand-mark"><i data-lucide="server"></i></span>{% endif %}
+      <span><b>{{ brand.site_name }}</b><small>VPS Cloud</small></span>
+    </a>
+    <nav>
+      {% if brand.discord_url %}<a href="{{ brand.discord_url }}" target="_blank" rel="noopener">Discord</a>{% endif %}
+      <a href="{{ url_for('login') }}">Login</a>
+      {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}">Get started</a>{% endif %}
+    </nav>
+  </header>
+
+  <section class="hero glass">
+    <div>
+      <span class="eyebrow">VIRTUAL PRIVATE SERVERS</span>
+      <h2>Real VPS power,<br><span class="grad">without the complexity.</span></h2>
+      <p>{{ brand.tagline or 'Deploy Ubuntu & Debian servers in seconds with hard CPU, RAM and disk limits, a live web console, and tmate SSH access — all from one clean panel.' }}</p>
+      <div class="flex gap-3 flex-wrap mt-6">
+        {% if brand.allow_registration %}<a class="btn btn-primary" href="{{ url_for('register') }}"><i data-lucide="rocket"></i> Create your server</a>{% endif %}
+        <a class="btn" href="{{ url_for('login') }}"><i data-lucide="log-in"></i> Sign in</a>
+      </div>
+      <div class="hero-points">
+        <span><i data-lucide="gauge"></i> Hard resource limits</span>
+        <span><i data-lucide="terminal"></i> Live web console</span>
+        <span><i data-lucide="key-round"></i> tmate SSH access</span>
+      </div>
+    </div>
+    <div class="hero-panel">
+      <div class="hp-row"><span class="dot dot-ok"></span> Ubuntu 24.04 · 2 vCPU / 2 GiB <b>running</b></div>
+      <div class="hp-row"><span class="dot dot-ok"></span> Debian 12 · 4 vCPU / 4 GiB <b>running</b></div>
+      <div class="hp-row"><span class="dot dot-warn"></span> Ubuntu 22.04 · provisioning <b>live progress</b></div>
+      <p class="muted text-sm mt-3">Every status in the panel comes from the server itself — no simulated data.</p>
+    </div>
+  </section>
+
+  {% if plans %}
+  <h3 class="section-title">Plans</h3>
+  <section class="grid grid-3">
+    {% for p in plans %}
+    <div class="card plan-card">
+      <h3>{{ p.name }}</h3>
+      <div class="plan-specs"><span><i data-lucide="cpu"></i> {{ p.max_vcpus }} vCPU</span><span><i data-lucide="memory-stick"></i> {{ p.max_memory_mb }} MiB RAM</span><span><i data-lucide="hard-drive"></i> {{ p.max_disk_gb }} GiB disk</span><span><i data-lucide="server"></i> up to {{ p.max_vps }} VPS</span></div>
+      {% if brand.allow_registration %}<a class="btn btn-primary w-full" href="{{ url_for('register') }}">Start with {{ p.name }}</a>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if os_images %}
+  <h3 class="section-title">Operating systems</h3>
+  <section class="grid grid-3">
+    {% for img in os_images %}
+    <div class="card os-card"><i data-lucide="disc-3"></i><div><b>{{ img.label }}</b><small>{{ img.slug }}</small></div></div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <section class="grid grid-3 mt-4">
+    <div class="card"><i data-lucide="shield-check" class="big-ic"></i><h3>Isolated by default</h3><p class="muted">Per-server CPU, memory and disk enforcement by the virtualization backend — not by honour system.</p></div>
+    <div class="card"><i data-lucide="activity" class="big-ic"></i><h3>Honest monitoring</h3><p class="muted">CPU, RAM, disk and uptime are read from each guest itself. Node health is shown separately, clearly labelled.</p></div>
+    <div class="card"><i data-lucide="life-buoy" class="big-ic"></i><h3>Built to recover</h3><p class="muted">Provisioning runs in a background worker that survives panel restarts and cleans up failed creations.</p></div>
+  </section>
+  <footer class="foot">{{ brand.site_name }} · VPS hosting{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
+</div>
+{% endblock %}

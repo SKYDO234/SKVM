@@ -1,0 +1,1 @@
+# Omega Panel core package.

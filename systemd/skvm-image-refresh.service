@@ -1,0 +1,10 @@
+[Unit]
+Description=SKVM image refresh check
+After=docker.service incus.service
+
+[Service]
+Type=oneshot
+User=skvm-panel
+Group=skvm-panel
+WorkingDirectory=/opt/skvm-panel
+ExecStart=/opt/skvm-panel/scripts/skvm-image-refresh.sh
