@@ -14,6 +14,7 @@ from . import backend, db
 from .config import AUTO_UPDATE
 from .crypto import encrypt_text
 from .engine import EngineError
+from .fetch_profile import sync_fetch_profile
 
 
 def _guest_prep(vps, root_password: str):
@@ -41,6 +42,9 @@ def _guest_prep(vps, root_password: str):
     _, out = backend.exec_shell(vps, script, timeout=600)
     if "SKVM_GUEST_READY" not in out:
         raise EngineError(f"Guest preparation did not complete: {out[-800:]}")
+    # Make `neofetch` / `fastfetch` in SSH and the web console show the
+    # allocation assigned to this VPS, not the host node's resources.
+    sync_fetch_profile(vps, timeout=60)
 
 
 def run_job(job_id):

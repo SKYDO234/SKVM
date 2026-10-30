@@ -53,6 +53,10 @@ def test_new_ui_identity():
     assert "Command Center" in base
     assert "Launch instance" in base
     assert "default_pw_warning" in base
-    assert "Space Grotesk" in base
-    assert "#b8f135" in css
+    assert "AURA GLASS OS" in base
+    assert "Sora" in base
+    assert "#67e8f9" in css
+    assert "backdrop-filter:blur(22px)" in css
+    assert "glassmorphic" in css
+    assert "#b8f135" not in css
     assert "#5e6ad2" not in css

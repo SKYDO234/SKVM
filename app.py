@@ -33,6 +33,7 @@ from core.config import (ALLOW_REGISTRATION, BACKEND, BIND, COOKIE_SECURE,
                          trust_proxy_enabled)
 from core.crypto import decrypt_text, encrypt_text
 from core.extensions import csrf, limiter, login_manager, socketio
+from core.fetch_profile import sync_fetch_profile
 from core.models import User
 
 # --------------------------------------------------------------------------
@@ -128,7 +129,7 @@ def branding():
         "site_name": s.get("site_name") or "SKVM PANEL",
         "tagline": s.get("site_tagline") or "",
         "logo_url": s.get("logo_url") or "",
-        "accent": s.get("accent") or "#b8f135",
+        "accent": s.get("accent") or "#67e8f9",
         "website_url": s.get("website_url") or "",
         "discord_url": s.get("discord_url") or "",
         "support_email": s.get("support_email") or "",
@@ -199,7 +200,7 @@ def register_routes(app):
     @app.context_processor
     def ctx():
         b = branding() if request.endpoint not in ("static",) else {
-            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#b8f135",
+            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#67e8f9",
             "website_url": "", "discord_url": "", "support_email": "",
             "maintenance": False, "allow_registration": True}
         return {"brand": b, "timezone": TIMEZONE, "panel_url": PANEL_URL,
@@ -408,7 +409,15 @@ def register_routes(app):
                           ip_address=st.get("ip"), desired_state=("running" if op in ("start", "restart") else "stopped"),
                           last_error=None)
             audit(f"vps.{op}", v.name)
-            flash(f"VPS {op} completed.", "success")
+            message = f"VPS {op} completed."
+            category = "success"
+            if op in ("start", "restart") and st.get("state") == "running":
+                try:
+                    sync_fetch_profile(db.get_vps(vps_id) or v, timeout=20)
+                except Exception as sync_exc:
+                    message += f" Allocation fetch refresh failed: {sync_exc}"
+                    category = "warning"
+            flash(message, category)
         except Exception as e:
             db.update_vps(vps_id, state="error", last_error=str(e)[:1000])
             flash(str(e), "danger")
@@ -441,6 +450,10 @@ def register_routes(app):
             if v.state != "running":
                 flash("VPS must be running to start an SSH (tmate) session.", "warning")
             else:
+                try:
+                    sync_fetch_profile(v, timeout=20)
+                except Exception:
+                    pass  # tmate can still start; provisioning normally installs it
                 try:
                     ssh, web = tmate.start_session(v)
                     db.update_vps(vps_id, tmate_ssh=ssh, tmate_web=web)
@@ -479,6 +492,11 @@ def register_routes(app):
         try:
             # Runs inside the user's own VPS as root (that shell access is
             # the feature); it can never reach the panel host.
+            if re.search(r"(^|[;&|]\s*)(?:sudo\s+)?(?:neofetch|fastfetch|skvm-fetch)(?:\s|$)", command):
+                try:
+                    sync_fetch_profile(v, timeout=20)
+                except Exception:
+                    pass  # the command output below still reports the real result
             rc, out = backend.exec_shell(v, command, timeout=60)
             audit("vps.run", v.name, command[:200])
             flash(f"$ {command}\n(exit {rc})\n{out[-3000:] or '(no output)'}", "console")
@@ -561,9 +579,9 @@ def register_routes(app):
     @admin_required
     def admin_settings():
         b = request.form
-        accent = (b.get("accent") or "#b8f135").strip()
+        accent = (b.get("accent") or "#67e8f9").strip()
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-            flash("Accent must be a hex colour like #b8f135.", "danger")
+            flash("Accent must be a hex colour like #67e8f9.", "danger")
             return redirect(url_for("admin"))
         for key in ("website_url", "discord_url", "logo_url"):
             val = (b.get(key) or "").strip()
@@ -705,6 +723,13 @@ def register_routes(app):
             res = backend.resize(v, cpu, mem, disk) if v.state in ("running", "stopped") else {}
             db.update_vps(vps_id, vcpus=cpu, memory_mb=mem, disk_gb=disk)
             note = res.get("disk_note") if isinstance(res, dict) else None
+            fresh = db.get_vps(vps_id) or v
+            if fresh.state == "running":
+                try:
+                    sync_fetch_profile(fresh, timeout=20)
+                    note = ((note + " ") if note else "") + "SSH fetch profile refreshed — neofetch/fastfetch now show the new allocation."
+                except Exception as sync_exc:
+                    note = ((note + " ") if note else "") + f"Fetch profile refresh failed: {sync_exc}"
             audit("admin.vps_resize", v.name, f"{cpu}/{mem}/{disk}")
             flash("VPS resources updated." + (f" {note}" if note else ""), "success")
         except Exception as e:
@@ -856,6 +881,14 @@ def register_console(app):
         session_obj = {"vps_id": v.id, "user_id": current_user.id, "proc": None,
                        "sock": None, "fd": None, "exec_id": None, "backend": v.backend,
                        "name": v.name}
+        # Existing guests may predate the allocation fetch profile, and
+        # admins may have changed resources since provisioning. Refresh it
+        # before the shell opens so neofetch/fastfetch are correct.
+        fetch_sync_error = None
+        try:
+            sync_fetch_profile(v, timeout=20)
+        except Exception as sync_exc:
+            fetch_sync_error = str(sync_exc)[:300]
         try:
             if v.backend == "docker":
                 import docker as docker_sdk
@@ -888,6 +921,9 @@ def register_console(app):
         db.audit(current_user, "vps.console_open", v.name, "", request.remote_addr or "")
         socketio.emit("output", f"\x1b[38;5;245mConnected to {v.name} ({v.backend}). Type 'exit' to end the shell.\x1b[0m\r\n",
                       namespace="/console", to=request.sid)
+        if fetch_sync_error:
+            socketio.emit("output", f"\x1b[33mSKVM fetch profile could not be refreshed: {fetch_sync_error}\x1b[0m\r\n",
+                          namespace="/console", to=request.sid)
         return True
 
     def _pty_reader(sid, fd, proc):

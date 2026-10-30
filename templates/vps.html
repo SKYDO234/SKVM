@@ -8,6 +8,15 @@
   <div class="metric glass"><small>Resources</small><b>{{ vps.vcpus }} vCPU · {{ vps.memory_mb }} MiB</b><span>{{ vps.disk_gb }} GiB disk</span></div>
   <div class="metric glass"><small>Network</small><b>{{ vps.ip_address or 'Pending' }}</b><span>hostname: {{ vps.hostname }}</span></div>
 </section>
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="sparkles"></i> Allocation profile</h2><p>These are the resources assigned to this VPS in SKVM. In the web console or SSH, run <b>neofetch</b> or <b>fastfetch</b> — SKVM refreshes the guest profile when the console opens, when the server starts, and after an admin changes resources.</p></div><a class="btn btn-small btn-primary" href="{{ url_for('vps_console', vps_id=vps.id) }}"><i data-lucide="terminal"></i> Try it in console</a></div>
+  <div class="allocation-grid">
+    <div class="allocation-tile"><small><i data-lucide="cpu"></i> CPU allocation</small><b>{{ vps.vcpus }} vCPU</b><span>Assigned by SKVM, enforced by {{ vps.backend }}</span></div>
+    <div class="allocation-tile"><small><i data-lucide="memory-stick"></i> RAM allocation</small><b>{{ vps.memory_mb }} MiB</b><span>Shown by neofetch/fastfetch in the guest</span></div>
+    <div class="allocation-tile"><small><i data-lucide="hard-drive"></i> Storage allocation</small><b>{{ vps.disk_gb }} GiB</b><span>Allocation target saved for this server</span></div>
+  </div>
+  <div class="command-chips"><code>$ neofetch</code><code>$ fastfetch</code><code>$ skvm-fetch --json</code></div>
+</section>
 {% if vps.last_error %}<div class="flash flash-danger"><b>Last error:</b> {{ vps.last_error }}</div>{% endif %}
 
 <div class="grid grid-2">

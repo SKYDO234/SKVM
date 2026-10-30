@@ -1,8 +1,8 @@
 # SKVM PANEL
 
-**SKVM PANEL — Cloud OS.** A VPS hosting and management platform with user and admin dashboards, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
+**SKVM PANEL — Aura Glass OS.** A VPS hosting and management platform with a glassmorphic user/admin experience, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
 
-![Stack](https://img.shields.io/badge/stack-Python%20%C2%B7%20Flask%20%C2%B7%20Docker%20%2B%20Incus-b8f135)
+![Stack](https://img.shields.io/badge/stack-Python%20%C2%B7%20Flask%20%C2%B7%20Docker%20%2B%20Incus-67e8f9)
 
 ---
 
@@ -13,7 +13,8 @@
 | Backends | **Docker** (Docker SDK for Python) and **Incus** (system containers + QEMU/KVM virtual machines). Auto mode picks a daemon that actually responds; a deploy fails honestly when none is available. |
 | OS catalogue | Ubuntu 20.04 / 22.04 / 24.04, Debian 11 / 12, each mapped to its Incus and Docker image references. Admins can add or disable images. |
 | Resource enforcement | Server-side on every deploy: plan caps → admin sanity bounds → per-user quota → real node capacity (host CPU/RAM/disk). Docker receives `nano_cpus`/`mem_limit`; disk uses overlay2 `storage_opt.size` where the driver supports it (jobs report truthfully when it cannot). Incus receives `limits.cpu`, `limits.memory` and a sized root device. |
-| Console | Flask-SocketIO + xterm.js terminal attached to the server itself (`docker exec` TTY / `incus exec`), styled after the supplied webssh design. Latency is a measured SocketIO round-trip. Authentication and ownership are checked on connect, input and resize. |
+| Console | Flask-SocketIO + xterm.js terminal attached to the server itself (`docker exec` TTY / `incus exec`). Latency is a measured SocketIO round-trip. Authentication and ownership are checked on connect, input and resize. |
+| SSH fetch | Provisioning installs SKVM’s allocation-aware fetch profile (`skvm-fetch`) and maps `neofetch`/`fastfetch` to it. The profile is refreshed on console open, server start/restart and admin resource changes, so those commands show the VPS’s assigned vCPU/RAM/disk (plus live guest facts) instead of host-node totals. `skvm-fetch --json` is available for scripts. |
 | SSH access | tmate is installed inside each guest at provisioning. Users start/stop sessions and receive the real connection string returned by the guest. Root passwords are generated per server, set with `chpasswd`, stored Fernet-encrypted, and resettable. |
 | Honest monitoring | Host figures are labelled as host figures. Per-server usage is read from the guest itself (daemon stats, `/proc`, `df`, `free`). Nothing is fabricated. |
 | Provisioning engine | Dedicated worker (`skvm-jobs`) with queued/running/done/error jobs, live progress polling, idempotent retry (existing instances are adopted, not duplicated), automatic cleanup of half-created instances, and a 60-second watchdog that re-syncs state with the backend. |

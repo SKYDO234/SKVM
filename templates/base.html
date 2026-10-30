@@ -8,11 +8,11 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { theme: { extend: { colors: { accent: '{{ brand.accent }}' },
-      fontFamily: { sans: ['Inter','system-ui','sans-serif'], display: ['Space Grotesk','Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }
+      fontFamily: { sans: ['Inter','system-ui','sans-serif'], display: ['Sora','Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/skvm.css') }}">
   <style>:root{ --accent: {{ brand.accent }}; }</style>
@@ -27,7 +27,7 @@
     <a class="brand" href="{{ url_for('dashboard') }}" aria-label="SKVM home">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
       {% else %}<span class="brand-mark">S</span>{% endif %}
-      <span><b>SKVM</b><small>CLOUD OS</small></span>
+      <span><b>SKVM</b><small>AURA GLASS OS</small></span>
     </a>
 
     <a class="launch-cta" href="{{ url_for('create_vps') }}"><i data-lucide="rocket"></i><span>Launch instance</span><i data-lucide="arrow-up-right" class="cta-arrow"></i></a>
@@ -64,7 +64,7 @@
     <header class="topbar">
       <button class="icon-btn" id="menuBtn" aria-label="Open menu"><i data-lucide="menu"></i></button>
       <div class="min-w-0 title-block">
-        <span class="eyebrow">{% block eyebrow %}SKVM OS{% endblock %}</span>
+        <span class="eyebrow">{% block eyebrow %}SKVM AURA{% endblock %}</span>
         <h1 class="truncate">{% block heading %}Command Center{% endblock %}</h1>
       </div>
       <div class="top-actions">
@@ -92,7 +92,7 @@
     {% endwith %}
 
     {% block content %}{% endblock %}
-    <footer class="foot">SKVM Cloud OS · Crafted for fast, honest infrastructure · {{ timezone }}</footer>
+    <footer class="foot">SKVM Aura Glass OS · Crafted for fast, honest infrastructure · {{ timezone }}</footer>
   </main>
 </div>
 {% else %}
