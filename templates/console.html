@@ -8,26 +8,26 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box}
-  :root{--bg-root:#070908;--bg-surface:#10130e;--bg-elevated:#171d13;--bg-hover:#202918;--border-subtle:#26301f;--border-medium:#35412a;--text-primary:#f5f8ee;--text-secondary:#c6cfba;--text-muted:#8d9a84;--accent:{{ brand.accent }};--accent-glow:rgba(184,241,53,.22);--success:#2ecc71;--success-glow:rgba(46,204,113,.3);--warning:#f0b34b;--danger:#e74c5a;--radius-sm:6px;--radius-md:10px}
-  html,body{height:100%;background:var(--bg-root);font-family:'Inter',system-ui,sans-serif;overflow:hidden;color:var(--text-primary);-webkit-font-smoothing:antialiased}
-  .app{display:flex;flex-direction:column;height:100vh;width:100vw}
-  .titlebar{display:flex;align-items:center;justify-content:space-between;height:46px;padding:0 14px;background:var(--bg-surface);border-bottom:1px solid var(--border-subtle);flex-shrink:0;user-select:none}
+  :root{--bg-root:#030713;--bg-surface:rgba(255,255,255,.075);--bg-elevated:rgba(255,255,255,.105);--bg-hover:rgba(255,255,255,.15);--border-subtle:rgba(255,255,255,.15);--border-medium:rgba(255,255,255,.25);--text-primary:#f7fbff;--text-secondary:#c9d7ea;--text-muted:#8ea3bb;--accent:{{ brand.accent }};--accent-glow:rgba(103,232,249,.28);--success:#34d399;--success-glow:rgba(52,211,153,.32);--warning:#fbbf24;--danger:#fb7185;--radius-sm:10px;--radius-md:16px}
+  html,body{height:100%;font-family:'Inter',system-ui,sans-serif;overflow:hidden;color:var(--text-primary);-webkit-font-smoothing:antialiased;background:radial-gradient(760px 420px at 10% -10%,rgba(103,232,249,.22),transparent 58%),radial-gradient(720px 460px at 95% 0%,rgba(167,139,250,.24),transparent 60%),linear-gradient(145deg,#030713,#061426 52%,#080818)}
+  .app{display:flex;flex-direction:column;height:100vh;width:100vw;padding:12px;gap:10px}
+  .titlebar{display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:7px 10px 7px 12px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:19px;flex-shrink:0;user-select:none;backdrop-filter:blur(22px) saturate(165%);box-shadow:0 20px 55px rgba(0,0,0,.34), inset 0 1px 0 rgba(255,255,255,.14)}
   .titlebar-left{display:flex;align-items:center;gap:8px;min-width:0}
-  .tab{display:flex;align-items:center;gap:10px;padding:7px 16px;background:var(--bg-elevated);border-radius:var(--radius-md);font-weight:500;font-size:12.5px;border:1px solid var(--border-subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .tab .dot{width:8px;height:8px;border-radius:50%;background:#3a3a44;flex-shrink:0}
+  .tab{display:flex;align-items:center;gap:10px;padding:8px 15px;background:rgba(2,8,20,.38);border-radius:999px;font-weight:600;font-size:12.5px;border:1px solid var(--border-subtle);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tab .dot{width:8px;height:8px;border-radius:50%;background:#64748b;flex-shrink:0}
   .tab.connected .dot{background:var(--success);box-shadow:0 0 12px var(--success-glow),0 0 4px var(--success)}
-  .back-link{color:var(--text-secondary);text-decoration:none;font-size:12px;padding:6px 10px;border-radius:var(--radius-sm)}
-  .back-link:hover{background:var(--bg-hover);color:var(--text-primary)}
+  .back-link{color:var(--text-secondary);text-decoration:none;font-size:12px;padding:7px 11px;border-radius:999px;border:1px solid transparent}
+  .back-link:hover{background:var(--bg-hover);color:var(--text-primary);border-color:var(--border-subtle)}
   .titlebar-right{display:flex;align-items:center;gap:8px}
-  .status-indicator{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;color:var(--text-muted);padding:5px 12px;background:var(--bg-root);border-radius:20px;border:1px solid var(--border-subtle)}
-  .status-indicator.connected{border-color:rgba(46,204,113,.3);color:#9bffc5;background:rgba(46,204,113,.06)}
-  .tb-btn{display:flex;align-items:center;gap:7px;padding:6px 14px;font-size:12px;font-weight:500;font-family:'Inter',sans-serif;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius-sm);color:var(--text-secondary);cursor:pointer;white-space:nowrap}
-  .tb-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary)}
+  .status-indicator{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;color:var(--text-muted);padding:6px 12px;background:rgba(2,8,20,.36);border-radius:999px;border:1px solid var(--border-subtle)}
+  .status-indicator.connected{border-color:rgba(52,211,153,.32);color:#a7f3d0;background:rgba(52,211,153,.07)}
+  .tb-btn{display:flex;align-items:center;gap:7px;padding:7px 13px;font-size:12px;font-weight:650;font-family:'Inter',sans-serif;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:999px;color:var(--text-secondary);cursor:pointer;white-space:nowrap;backdrop-filter:blur(16px);transition:.18s}
+  .tb-btn:hover:not(:disabled){background:var(--bg-hover);color:var(--text-primary);transform:translateY(-1px)}
   .tb-btn:disabled{opacity:.35;cursor:not-allowed}
-  .tb-btn.primary{background:var(--accent);border-color:var(--accent);color:#131a08;box-shadow:0 0 20px var(--accent-glow)}
-  .terminal-host{flex:1;padding:8px 10px;background:var(--bg-root);overflow:hidden;position:relative}
-  #terminal{width:100%;height:100%;border-radius:var(--radius-md);overflow:hidden;border:1px solid var(--border-subtle);box-shadow:inset 0 0 40px rgba(0,0,0,.4)}
-  .statusbar{display:flex;align-items:center;justify-content:space-between;height:32px;padding:0 14px;background:var(--bg-surface);border-top:1px solid var(--border-subtle);font-size:11px;color:var(--text-muted);flex-shrink:0}
+  .tb-btn.primary{background:linear-gradient(135deg,var(--accent),#818cf8 58%,#a78bfa);border-color:rgba(255,255,255,.34);color:#051522;box-shadow:0 12px 28px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,.55)}
+  .terminal-host{flex:1;padding:12px;background:linear-gradient(145deg,rgba(255,255,255,.1),rgba(255,255,255,.035));overflow:hidden;position:relative;border:1px solid var(--border-subtle);border-radius:24px;backdrop-filter:blur(22px) saturate(160%);box-shadow:0 24px 70px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.13)}
+  #terminal{width:100%;height:100%;border-radius:17px;overflow:hidden;border:1px solid rgba(255,255,255,.1);box-shadow:inset 0 0 46px rgba(0,0,0,.48);background:#040914}
+  .statusbar{display:flex;align-items:center;justify-content:space-between;min-height:36px;padding:5px 14px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:999px;font-size:11px;color:var(--text-muted);flex-shrink:0;backdrop-filter:blur(20px) saturate(160%)}
   .statusbar-left{display:flex;gap:18px}
   .sb-item{display:flex;align-items:center;gap:6px}
   .toast{position:fixed;bottom:44px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg-elevated);border:1px solid var(--border-medium);border-radius:var(--radius-md);padding:11px 18px;font-size:12.5px;box-shadow:0 8px 32px rgba(0,0,0,.6);opacity:0;pointer-events:none;transition:all .25s;z-index:50}
@@ -56,6 +56,7 @@
       <div class="sb-item"><span id="sbSessionText">No session</span></div>
       <div class="sb-item"><span>Latency&nbsp;<b id="sbLatencyText">—</b></span></div>
       <div class="sb-item"><span>{{ vps.backend }} · {{ vps.os_slug }}</span></div>
+      <div class="sb-item"><span>Assigned: {{ vps.vcpus }} vCPU · {{ vps.memory_mb }} MiB · {{ vps.disk_gb }} GiB</span></div>
     </div>
     <div class="sb-item"><span>{{ brand.site_name }} · xterm.js + Socket.IO</span></div>
   </div>
@@ -83,8 +84,8 @@
     cursorBlink:true, cursorStyle:'block',
     fontFamily:"'JetBrains Mono','Consolas','Fira Code',monospace", fontSize:14, lineHeight:1.25,
     scrollback:8000, convertEol:true, allowProposedApi:true, smoothScrollDuration:80,
-    theme:{ background:'#0a0a0c', foreground:'#d8d8e0', cursor:'#b8aaff', cursorAccent:'#0a0a0c',
-      selectionBackground:'#3a2d6e', selectionForeground:'#f5f8ee',
+    theme:{ background:'#040914', foreground:'#dbeafe', cursor:'#67e8f9', cursorAccent:'#040914',
+      selectionBackground:'rgba(103,232,249,.28)', selectionForeground:'#f7fbff',
       black:'#1a1a20', red:'#f07178', green:'#7ec699', yellow:'#f0c674', blue:'#82aaff',
       magenta:'#c792ea', cyan:'#7fdbca', white:'#d8d8e0', brightBlack:'#5c5c6e',
       brightRed:'#ff8b92', brightGreen:'#9dffb0', brightYellow:'#ffe08a', brightBlue:'#a4c2ff',
@@ -97,9 +98,10 @@
   setTimeout(function(){ try{fitAddon.fit();}catch(e){} }, 60);
   window.addEventListener('resize', function(){ try{fitAddon.fit();}catch(e){} });
 
-  term.writeln('\x1b[1;38;5;141m╭──────────────────────────────────────────╮\x1b[0m');
-  term.writeln('\x1b[1;38;5;141m│\x1b[0m  \x1b[1;97m{{ brand.site_name }}\x1b[0m  \x1b[38;5;245m— Live Console\x1b[0m');
-  term.writeln('\x1b[1;38;5;141m╰──────────────────────────────────────────╯\x1b[0m');
+  term.writeln('\x1b[1;38;5;81m╭──────────────────────────────────────────╮\x1b[0m');
+  term.writeln('\x1b[1;38;5;81m│\x1b[0m  \x1b[1;97m{{ brand.site_name }}\x1b[0m  \x1b[38;5;245m— Aura Live Console\x1b[0m');
+  term.writeln('\x1b[1;38;5;81m╰──────────────────────────────────────────╯\x1b[0m');
+  term.writeln('\x1b[38;5;245mTip: free -h, neofetch and fastfetch read this VPS's own (LXCFS-virtualized) /proc. SSH keys are pre-created, so tmate works out of the box.\x1b[0m');
   term.writeln('');
 
   if (VPS_STATE !== 'running') {

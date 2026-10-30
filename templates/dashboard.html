@@ -4,7 +4,7 @@
 {% block content %}
 <section class="command-hero">
   <div>
-    <span class="eyebrow">SKVM CLOUD OS</span>
+    <span class="eyebrow">SKVM AURA GLASS OS</span>
     <h2>Hello, {{ current_user.username }}.</h2>
     <p>{% if plan %}You're on the <b>{{ plan.name }}</b> plan. {% endif %}Your infrastructure, live from the backend — launch, power, console and SSH from one place.</p>
   </div>
@@ -31,7 +31,7 @@
 </div>
 
 <section class="card">
-  <div class="card-head"><div><h2><i data-lucide="servers"></i> Your fleet</h2><p>Every status below is read live from Docker, Podman or Incus. Nothing is simulated.</p></div>
+  <div class="card-head"><div><h2><i data-lucide="servers"></i> Your fleet</h2><p>Every status below is read live from Docker, Podman or Incus. Inside each server, real <b>neofetch</b> and <b>fastfetch</b> read the guest’s own LXCFS-virtualized /proc — your VPS limits, never the host’s totals.</p></div>
   <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New server</a></div>
   {% if vps %}
   <div class="fleet-grid" id="servers">

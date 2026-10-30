@@ -10,6 +10,7 @@ import os
 import platform
 import shutil
 import subprocess
+from pathlib import Path
 import psutil
 
 
@@ -27,6 +28,30 @@ def cmd_version(cmd):
 
 def has_cmd(cmd):
     return shutil.which(cmd) is not None
+
+
+def lxcfs_status() -> dict:
+    """LXCFS virtualizes /proc so guest tools (free, neofetch, fastfetch)
+    report the container's own limits instead of the host node's.
+
+    LXCFS must run on the same host as the container runtime. The panel
+    reports it honestly: active with mount root, or unavailable with the
+    reason it cannot provide virtualized stats here.
+    """
+    disabled = (os.getenv("SKVM_LXCFS", "true") or "").strip().lower() in {"0", "false", "no", "off"}
+    root = Path((os.getenv("SKVM_LXCFS_PATH", "/var/lib/lxcfs") or "/var/lib/lxcfs").strip())
+    if disabled:
+        return {"ok": False, "path": str(root), "message": "LXCFS disabled via SKVM_LXCFS"}
+    if (root / "proc" / "meminfo").exists():
+        return {"ok": True, "path": str(root),
+                "message": "LXCFS active — guest /proc is virtualized per-container"}
+    binary = shutil.which("lxcfs")
+    fuse = Path("/dev/fuse").exists()
+    if binary and not fuse:
+        return {"ok": False, "path": str(root), "binary": binary,
+                "message": "lxcfs is installed but /dev/fuse is not available in this environment"}
+    return {"ok": False, "path": str(root), "binary": binary,
+            "message": "LXCFS not running on this node (install lxcfs or run on the Docker host)"}
 
 
 def kvm_status():
@@ -108,6 +133,7 @@ def snapshot():
         "incus": incus_status(),
         "docker": docker_status(),
         "kvm": kvm_status(),
+        "lxcfs": lxcfs_status(),
         "qemu": cmd_version("qemu-system-x86_64"),
     }
 

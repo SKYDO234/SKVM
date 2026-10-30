@@ -128,7 +128,7 @@ def branding():
         "site_name": s.get("site_name") or "SKVM PANEL",
         "tagline": s.get("site_tagline") or "",
         "logo_url": s.get("logo_url") or "",
-        "accent": s.get("accent") or "#b8f135",
+        "accent": s.get("accent") or "#67e8f9",
         "website_url": s.get("website_url") or "",
         "discord_url": s.get("discord_url") or "",
         "support_email": s.get("support_email") or "",
@@ -199,7 +199,7 @@ def register_routes(app):
     @app.context_processor
     def ctx():
         b = branding() if request.endpoint not in ("static",) else {
-            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#b8f135",
+            "site_name": "SKVM PANEL", "tagline": "", "logo_url": "", "accent": "#67e8f9",
             "website_url": "", "discord_url": "", "support_email": "",
             "maintenance": False, "allow_registration": True}
         return {"brand": b, "timezone": TIMEZONE, "panel_url": PANEL_URL,
@@ -408,7 +408,9 @@ def register_routes(app):
                           ip_address=st.get("ip"), desired_state=("running" if op in ("start", "restart") else "stopped"),
                           last_error=None)
             audit(f"vps.{op}", v.name)
-            flash(f"VPS {op} completed.", "success")
+            message = f"VPS {op} completed."
+            category = "success"
+            flash(message, category)
         except Exception as e:
             db.update_vps(vps_id, state="error", last_error=str(e)[:1000])
             flash(str(e), "danger")
@@ -561,9 +563,9 @@ def register_routes(app):
     @admin_required
     def admin_settings():
         b = request.form
-        accent = (b.get("accent") or "#b8f135").strip()
+        accent = (b.get("accent") or "#67e8f9").strip()
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-            flash("Accent must be a hex colour like #b8f135.", "danger")
+            flash("Accent must be a hex colour like #67e8f9.", "danger")
             return redirect(url_for("admin"))
         for key in ("website_url", "discord_url", "logo_url"):
             val = (b.get(key) or "").strip()

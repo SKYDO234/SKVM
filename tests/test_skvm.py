@@ -199,6 +199,30 @@ def test_provisioning_pipeline_with_mocked_backend(client, monkeypatch):
         assert decrypt_text(v2.root_password_enc)
 
 
+def test_admin_resize_updates_allocation(client, monkeypatch):
+    _register(client, "frank", "FrankPass123")
+    with flask_app.app_context():
+        owner = db.get_user_by_username("frank")
+        node_id = db.list_nodes()[0].id
+        vps_id = db.create_vps(owner.id, node_id, "frank-1", "ubuntu-24.04",
+                               "container", 1, 1024, 15, "frank-1",
+                               backend="docker", plan_id=_plan_id())
+        db.update_vps(vps_id, state="running")
+
+    monkeypatch.setattr(backend, "resize", lambda v, cpu, mem, disk: {})
+    admin = flask_app.test_client()
+    _login(admin, "admin", "TestAdminPass123")
+    page = admin.get("/admin/vps")
+    import re
+    token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+    r = admin.post(f"/admin/vps/{vps_id}/resources",
+                   data={"csrf_token": token, "vcpus": 3, "memory": 3072, "disk": 45})
+    assert r.status_code in (302, 303)
+    with flask_app.app_context():
+        v = db.get_vps(vps_id)
+        assert (v.vcpus, v.memory_mb, v.disk_gb) == (3, 3072, 45)
+
+
 def test_console_requires_auth_and_ownership(client):
     # Anonymous socket must be rejected.
     anon = socketio.test_client(flask_app, namespace="/console",

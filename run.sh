@@ -111,6 +111,35 @@ else
 fi
 export DOCKER_HOST="${DOCKER_HOST:-}"
 
+# --- LXCFS (guest /proc virtualization) ---------------------------------
+# Makes guest tools (free, neofetch, fastfetch) report each VPS's own
+# limits instead of host totals. Must run on the container daemon's host:
+# with DinD/rootless runtimes started here that is this environment; with
+# a mounted host socket it must run on the outer host instead. The panel
+# detects /var/lib/lxcfs either way and reports honestly when absent.
+case "$(printf '%s' "${SKVM_LXCFS:-true}" | tr '[:upper:]' '[:lower:]')" in
+  0|false|no|off) echo "[skvm] LXCFS disabled via SKVM_LXCFS" ;;
+  *)
+    LXCFS_ROOT="${SKVM_LXCFS_PATH:-/var/lib/lxcfs}"
+    if [ -e "$LXCFS_ROOT/proc/meminfo" ]; then
+      echo "[skvm] LXCFS active at $LXCFS_ROOT — guest /proc will be virtualized per-VPS"
+    elif ! command -v lxcfs >/dev/null 2>&1; then
+      echo "[skvm] LXCFS not installed — guest fetch tools show runtime stats without /proc virtualization"
+    elif [ ! -e /dev/fuse ]; then
+      echo "[skvm] LXCFS installed but /dev/fuse unavailable — cannot virtualize guest /proc here"
+    else
+      mkdir -p "$LXCFS_ROOT" 2>/dev/null || true
+      (lxcfs "$LXCFS_ROOT" >"$DATA_DIR/lxcfs.log" 2>&1 &) || true
+      sleep 1
+      if [ -e "$LXCFS_ROOT/proc/meminfo" ]; then
+        echo "[skvm] LXCFS started at $LXCFS_ROOT — new Docker VPS will mount its virtualized /proc"
+      else
+        echo "[skvm] LXCFS did not come up (see $DATA_DIR/lxcfs.log) — continuing without it"
+      fi
+    fi
+    ;;
+esac
+
 # ------------------------------------------------------------------ start
 echo "[skvm] Initialising database + first admin..."
 "$VPY" - <<'PYEOF'

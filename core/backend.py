@@ -66,7 +66,17 @@ def create(vps):
     # Incus backend (system containers and QEMU virtual machines).
     create_instance(vps.name, vps.os_slug, vps.engine, vps.vcpus, vps.memory_mb, vps.disk_gb)
     st = incus_status_of(vps.name)
-    return {"container_id": None, "ip": st.get("ip"), "disk_quota_enforced": True}
+    # Incus mounts the host's LXCFS into system containers automatically
+    # when it is running there. VMs see their real guest kernel instead.
+    lxcfs_on = False
+    if vps.engine == "container":
+        try:
+            from .capabilities import lxcfs_status
+            lxcfs_on = bool(lxcfs_status().get("ok"))
+        except Exception:
+            lxcfs_on = False
+    return {"container_id": None, "ip": st.get("ip"), "disk_quota_enforced": True,
+            "lxcfs": lxcfs_on}
 
 
 def status(vps):

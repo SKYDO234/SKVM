@@ -33,6 +33,7 @@
     <label>RAM (MiB) <input type="number" name="memory" id="inMem" min="512" max="262144" step="256" value="{{ default_memory }}" required></label>
     <label>Disk (GiB) <input type="number" name="disk" id="inDisk" min="5" max="4096" value="{{ default_disk }}" required></label>
     <p class="muted full" id="planHint"></p>
+    <p class="muted full"><i data-lucide="sparkles"></i> Provisioning creates the guest’s SSH keys automatically. With LXCFS on the node, real <b>neofetch</b>/<b>fastfetch</b> inside the server report these vCPU/RAM limits from the guest’s virtualized /proc.</p>
     <button class="btn btn-primary full" type="submit"><i data-lucide="rocket"></i> Launch server</button>
   </form>
   {% endif %}

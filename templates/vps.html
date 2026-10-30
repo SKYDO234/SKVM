@@ -8,6 +8,15 @@
   <div class="metric glass"><small>Resources</small><b>{{ vps.vcpus }} vCPU · {{ vps.memory_mb }} MiB</b><span>{{ vps.disk_gb }} GiB disk</span></div>
   <div class="metric glass"><small>Network</small><b>{{ vps.ip_address or 'Pending' }}</b><span>hostname: {{ vps.hostname }}</span></div>
 </section>
+<section class="card glass">
+  <div class="card-head"><div><h2><i data-lucide="sparkles"></i> Allocation profile</h2><p>These are the resources assigned to this VPS in SKVM and enforced by the runtime. In the web console or SSH, the real <b>neofetch</b>/<b>fastfetch</b> read the guest’s LXCFS-virtualized /proc, so CPU/RAM reflect this allocation — not the node’s totals (disk comes from the guest filesystem/quota).</p></div><a class="btn btn-small btn-primary" href="{{ url_for('vps_console', vps_id=vps.id) }}"><i data-lucide="terminal"></i> Try it in console</a></div>
+  <div class="allocation-grid">
+    <div class="allocation-tile"><small><i data-lucide="cpu"></i> CPU allocation</small><b>{{ vps.vcpus }} vCPU</b><span>Assigned by SKVM, enforced by {{ vps.backend }}</span></div>
+    <div class="allocation-tile"><small><i data-lucide="memory-stick"></i> RAM allocation</small><b>{{ vps.memory_mb }} MiB</b><span>Visible via LXCFS-virtualized /proc in the guest</span></div>
+    <div class="allocation-tile"><small><i data-lucide="hard-drive"></i> Storage allocation</small><b>{{ vps.disk_gb }} GiB</b><span>Allocation target saved for this server</span></div>
+  </div>
+  <div class="command-chips"><code>$ neofetch</code><code>$ fastfetch</code><code>$ free -h</code><code>$ nproc</code></div>
+</section>
 {% if vps.last_error %}<div class="flash flash-danger"><b>Last error:</b> {{ vps.last_error }}</div>{% endif %}
 
 <div class="grid grid-2">
@@ -63,7 +72,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-danger" type="submit"><i data-lucide="unplug"></i> Stop SSH session</button></form>
       {% else %}
-        <p class="muted text-sm">tmate is installed during provisioning. Starting a session gives you a real SSH connection string for this VPS.</p>
+        <p class="muted text-sm">tmate + SSH keys (host keys and a root identity) are created during provisioning, so starting a session gives you a real SSH connection string for this VPS. Older guests are repaired automatically on start.</p>
         <form method="post" action="{{ url_for('vps_tmate', vps_id=vps.id, op='start') }}" class="mt-3">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-primary" type="submit"><i data-lucide="plug"></i> Start SSH (tmate) session</button></form>

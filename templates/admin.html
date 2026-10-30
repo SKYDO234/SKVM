@@ -7,6 +7,7 @@
   <div class="metric glass"><small>Total VPS</small><b>{{ vps|length }}</b><span>{{ vps|selectattr('state','equalto','running')|list|length }} running</span></div>
   <div class="metric glass"><small>Node (host)</small><b>{{ caps.hostname }}</b><span>CPU {{ caps.cpu_percent }}% · RAM {{ caps.memory_percent }}%</span></div>
   <div class="metric glass"><small>Backends</small><b>{{ 'Docker ✓' if caps.docker.available else 'Docker ✗' }} · {{ 'Incus ✓' if caps.incus.available else 'Incus ✗' }}</b><span>KVM: {{ 'ready' if caps.kvm.ok else 'unavailable' }}</span></div>
+  <div class="metric glass"><small>Guest /proc (LXCFS)</small><b>{{ 'Virtualized ✓' if caps.lxcfs.ok else 'Unavailable' }}</b><span>{{ caps.lxcfs.message }}</span></div>
 </section>
 
 <div class="grid grid-2">
@@ -17,7 +18,7 @@
     <label>Site name<input name="site_name" value="{{ settings.get('site_name','SKVM PANEL') }}" required></label>
     <label>Tagline<input name="site_tagline" value="{{ settings.get('site_tagline','') }}"></label>
     <label>Logo URL<input name="logo_url" value="{{ settings.get('logo_url','') }}" placeholder="https://… (empty = default icon)"></label>
-    <label>Accent colour<input type="color" name="accent" value="{{ settings.get('accent','#b8f135') }}"></label>
+    <label>Accent colour<input type="color" name="accent" value="{{ settings.get('accent','#67e8f9') }}"></label>
     <label>Website URL<input name="website_url" value="{{ settings.get('website_url','') }}" placeholder="https://…"></label>
     <label>Discord URL<input name="discord_url" value="{{ settings.get('discord_url','') }}" placeholder="https://discord.gg/…"></label>
     <label>Support email<input name="support_email" value="{{ settings.get('support_email','') }}"></label>
@@ -34,7 +35,7 @@
   <form method="post" action="{{ url_for('admin_settings') }}" class="form-grid">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="site_name" value="{{ settings.get('site_name','SKVM PANEL') }}">
-    <input type="hidden" name="accent" value="{{ settings.get('accent','#b8f135') }}">
+    <input type="hidden" name="accent" value="{{ settings.get('accent','#67e8f9') }}">
     <label>Default backend<select name="default_backend"><option value="auto" {% if settings.get('default_backend')=='auto' %}selected{% endif %}>Auto (Incus preferred)</option><option value="incus" {% if settings.get('default_backend')=='incus' %}selected{% endif %}>Incus</option><option value="docker" {% if settings.get('default_backend')=='docker' %}selected{% endif %}>Docker</option></select></label>
     <label>Default vCPU<input type="number" name="default_vcpus" min="1" max="64" value="{{ settings.get('default_vcpus','2') }}"></label>
     <label>Default RAM (MiB)<input type="number" name="default_memory_mb" min="512" value="{{ settings.get('default_memory_mb','2048') }}"></label>

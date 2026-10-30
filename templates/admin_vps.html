@@ -20,7 +20,7 @@
 </section>
 
 <section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="server-cog"></i> All virtual servers</h2></div></div>
+  <div class="card-head"><div><h2><i data-lucide="server-cog"></i> All virtual servers</h2><p>Applying new resources updates the live backend limits (CPU quota + cpuset, memory, disk); with LXCFS the guest’s next <b>neofetch</b>/<b>fastfetch</b> reflects them from its virtualized /proc.</p></div></div>
   {% if vps %}<div class="table-wrap"><table class="table"><thead><tr><th>VPS</th><th>Owner</th><th>State</th><th>Resources (editable)</th><th>Actions</th></tr></thead><tbody>
   {% for v in vps %}
   <tr>

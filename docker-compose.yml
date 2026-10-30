@@ -8,6 +8,11 @@
 # creates is a sibling container on the host daemon with hard CPU/RAM
 # limits. Set DOCKER_SOCKET=/run/podman/podman.sock for rootful Podman,
 # or /run/user/1000/podman/podman.sock for rootless Podman.
+#
+# Guest /proc virtualization (real per-VPS CPU/RAM in neofetch/fastfetch)
+# needs LXCFS on the HOST: `sudo apt install lxcfs && sudo systemctl
+# enable --now lxcfs`. The read-only mount below lets the panel detect
+# it; new VPS containers then bind its /proc files automatically.
 services:
   panel:
     build: .
@@ -25,6 +30,7 @@ services:
     volumes:
       - skvm-data:/data
       - "${DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock"
+      - /var/lib/lxcfs:/var/lib/lxcfs:ro   # host LXCFS detection (optional)
     # The panel needs socket write access; on multi-user hosts prefer
     # adding the container user to the docker group instead of root.
     # user: "0:0"  # default (root in container) - dev/single-admin hosts only

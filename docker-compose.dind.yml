@@ -9,6 +9,12 @@
 #
 # WARNING: the `dind` service is privileged (it is a full Docker daemon).
 # Never publish its port; it is only reachable on the internal network.
+#
+# Guest /proc virtualization (LXCFS) must run inside the `dind` container
+# (that is where the daemon lives), e.g. after startup:
+#   docker exec skvm-dind sh -c 'apk add lxcfs && lxcfs /var/lib/lxcfs &'
+# Without it, panels/guests still work; fetch tools then show runtime
+# stats without LXCFS virtualization and the admin page says so.
 services:
   dind:
     image: docker:dind
