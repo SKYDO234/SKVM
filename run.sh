@@ -141,6 +141,22 @@ case "$(printf '%s' "${SKVM_LXCFS:-true}" | tr '[:upper:]' '[:lower:]')" in
 esac
 
 # ------------------------------------------------------------------ start
+# Duplicate-start guard: a second panel on the same port/database spawns
+# a second job worker, and two workers provisioning the same guest at
+# once corrupts guest apt state. If SKVM already answers on this port,
+# point the user at it and exit cleanly instead of Gunicorn bind spam.
+if curl -fsS --max-time 3 "http://127.0.0.1:$PORT/healthz" 2>/dev/null | grep -q '"skvm-panel"'; then
+  echo "[skvm] SKVM PANEL is already running on port $PORT (health check OK)."
+  echo "[skvm] Open the existing panel instead of starting a second copy."
+  echo "[skvm] (Codespaces: use the forwarded $PORT preview URL.)"
+  exit 0
+fi
+if python3 -c "import socket,sys; s=socket.socket(); sys.exit(0 if s.connect_ex(('127.0.0.1', $PORT)) == 0 else 1)" 2>/dev/null; then
+  echo "[skvm] ERROR: port $PORT is already in use by another process (not SKVM)." >&2
+  echo "[skvm] Stop it, or start SKVM on a different port: SKVM_PORT=5560 bash run.sh" >&2
+  exit 1
+fi
+
 echo "[skvm] Initialising database + first admin..."
 "$VPY" - <<'PYEOF'
 from app import app, bootstrap_admin

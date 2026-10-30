@@ -263,3 +263,65 @@ def test_reinstall_destroys_and_requeues_provision(client, monkeypatch):
         assert v.state == "creating" and v.ip_address is None
         jobs = db.list_jobs_for_vps(vps_id, 5)
         assert jobs and jobs[0].kind == "provision" and "reinstall" in jobs[0].message.lower()
+
+
+def test_claim_job_is_atomic(client):
+    with flask_app.app_context():
+        db.create_user("henry", "HenryPass123")
+        owner = db.get_user_by_username("henry")
+        node_id = db.list_nodes()[0].id
+        vps_id = db.create_vps(owner.id, node_id, "henry-1", "ubuntu-24.04",
+                               "container", 1, 1024, 15, "henry-1",
+                               backend="docker", plan_id=_plan_id())
+        job_id = db.create_job(vps_id, "provision", "Queued")
+        # Only the first worker may claim; a duplicate panel gets False.
+        assert db.claim_job(job_id) is True
+        assert db.claim_job(job_id) is False
+
+
+def test_failed_guest_prep_keeps_instance(client, monkeypatch):
+    with flask_app.app_context():
+        db.create_user("irene", "IrenePass123")
+        owner = db.get_user_by_username("irene")
+        node_id = db.list_nodes()[0].id
+        vps_id = db.create_vps(owner.id, node_id, "irene-1", "ubuntu-24.04",
+                               "container", 1, 1024, 15, "irene-1",
+                               backend="docker", plan_id=_plan_id())
+        job_id = db.create_job(vps_id, "provision", "Queued")
+
+    import core.provision as prov
+    removed = []
+    monkeypatch.setattr(backend, "create", lambda vv: {"container_id": "cid999", "disk_quota_enforced": True})
+    monkeypatch.setattr(backend, "do_action", lambda vv, op: {"state": "stopped"})
+    monkeypatch.setattr(backend, "remove_instance", lambda vv: removed.append(vv.name))
+    monkeypatch.setattr(prov, "_guest_prep",
+                        lambda vv, pw: (_ for _ in ()).throw(prov.EngineError("apt exploded")))
+    with flask_app.app_context():
+        prov.run_job(job_id)
+        v2 = db.get_vps(vps_id)
+        assert removed == []                      # instance kept for recovery
+        assert v2.state == "error"
+        assert "Start to retry" in (v2.last_error or "")
+
+
+def test_start_on_missing_container_requeues_provision(client, monkeypatch):
+    _login(client, "admin", "TestAdminPass123")
+    with flask_app.app_context():
+        owner = db.get_user_by_username("admin")
+        node_id = db.list_nodes()[0].id
+        vps_id = db.create_vps(owner.id, node_id, "judy-1", "ubuntu-24.04",
+                               "container", 1, 1024, 15, "judy-1",
+                               backend="docker", plan_id=_plan_id())
+        db.update_vps(vps_id, state="running", root_password_enc="captured")
+
+    monkeypatch.setattr(backend, "status", lambda vv: {"state": "missing", "ip": None})
+    import re
+    page = client.get(f"/vps/{vps_id}")
+    token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+    r = client.post(f"/vps/{vps_id}/start", data={"csrf_token": token})
+    assert r.status_code in (302, 303)
+    with flask_app.app_context():
+        v = db.get_vps(vps_id)
+        assert v.state == "creating"
+        jobs = db.list_jobs_for_vps(vps_id, 3)
+        assert jobs and jobs[0].status == "queued" and "recovery" in jobs[0].message.lower()
