@@ -191,6 +191,19 @@ if [[ "$BACKEND" == "docker" || "$BACKEND" == "both" ]]; then
     fi
   fi
   systemctl enable --now docker 2>/dev/null || systemctl enable --now docker.service || true
+  # LXCFS virtualizes guest /proc so real neofetch/fastfetch/free inside
+  # each VPS report the container's own CPU/RAM limits, not host totals.
+  if [[ "${SKVM_LXCFS:-true}" != "false" && "${SKVM_LXCFS:-true}" != "0" ]]; then
+    if command -v apt-get >/dev/null 2>&1; then
+      DEBIAN_FRONTEND=noninteractive apt-get install -y lxcfs >/dev/null 2>&1 || true
+    fi
+    systemctl enable --now lxcfs >/dev/null 2>&1 || systemctl start lxcfs >/dev/null 2>&1 || true
+    if [[ -e /var/lib/lxcfs/proc/meminfo ]]; then
+      echo "[SKVM] LXCFS active at /var/lib/lxcfs — guest /proc will be virtualized per-VPS"
+    else
+      echo "[SKVM] LXCFS not active (package unavailable?) — guests still work; fetch tools show runtime stats without /proc virtualization"
+    fi
+  fi
   if docker info >/dev/null 2>&1; then
     echo "[SKVM] Docker daemon OK: $(docker --version)"
   else
@@ -219,6 +232,12 @@ if [[ "$BACKEND" == "incus" || "$BACKEND" == "both" ]]; then
     else
       echo "[SKVM] Incus packages are only automated on apt systems; install Incus manually, then re-run."; exit 1
     fi
+  fi
+  # Incus mounts the host's LXCFS into system containers automatically.
+  if [[ "${SKVM_LXCFS:-true}" != "false" && "${SKVM_LXCFS:-true}" != "0" ]] && command -v apt-get >/dev/null 2>&1; then
+    DEBIAN_FRONTEND=noninteractive apt-get install -y lxcfs >/dev/null 2>&1 || true
+    systemctl enable --now lxcfs >/dev/null 2>&1 || true
+    [[ -e /var/lib/lxcfs/proc/meminfo ]] && echo "[SKVM] LXCFS active — Incus containers get virtualized /proc" || true
   fi
   systemctl enable --now incus 2>/dev/null || systemctl enable --now incus.service 2>/dev/null || true
   if command -v incus >/dev/null 2>&1; then
@@ -287,6 +306,7 @@ SKVM_BACKEND_VALUE="auto"
   printf 'SKVM_SECRET_FILE=%s\n' "$DATA_DIR/.secret_key"
   printf 'SKVM_NODE_TOKEN_FILE=%s\n' "$DATA_DIR/.node_token"
   printf 'SKVM_TIMEZONE=%s\n' "${SKVM_TIMEZONE:-UTC}"
+  printf 'SKVM_LXCFS=%s\n' "${SKVM_LXCFS:-true}"
   printf 'SKVM_ADMIN_USERNAME=%s\n' "$ADMIN_USER_VALUE"
   [[ -n "$ADMIN_PASS_VALUE" ]] && printf 'SKVM_ADMIN_PASSWORD=%s\n' "$ADMIN_PASS_VALUE"
 } > "$CONF_DIR/skvm.env"

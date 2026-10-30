@@ -33,7 +33,6 @@ from core.config import (ALLOW_REGISTRATION, BACKEND, BIND, COOKIE_SECURE,
                          trust_proxy_enabled)
 from core.crypto import decrypt_text, encrypt_text
 from core.extensions import csrf, limiter, login_manager, socketio
-from core.fetch_profile import sync_fetch_profile
 from core.models import User
 
 # --------------------------------------------------------------------------
@@ -411,12 +410,6 @@ def register_routes(app):
             audit(f"vps.{op}", v.name)
             message = f"VPS {op} completed."
             category = "success"
-            if op in ("start", "restart") and st.get("state") == "running":
-                try:
-                    sync_fetch_profile(db.get_vps(vps_id) or v, timeout=20)
-                except Exception as sync_exc:
-                    message += f" Allocation fetch refresh failed: {sync_exc}"
-                    category = "warning"
             flash(message, category)
         except Exception as e:
             db.update_vps(vps_id, state="error", last_error=str(e)[:1000])
@@ -450,10 +443,6 @@ def register_routes(app):
             if v.state != "running":
                 flash("VPS must be running to start an SSH (tmate) session.", "warning")
             else:
-                try:
-                    sync_fetch_profile(v, timeout=20)
-                except Exception:
-                    pass  # tmate can still start; provisioning normally installs it
                 try:
                     ssh, web = tmate.start_session(v)
                     db.update_vps(vps_id, tmate_ssh=ssh, tmate_web=web)
@@ -492,11 +481,6 @@ def register_routes(app):
         try:
             # Runs inside the user's own VPS as root (that shell access is
             # the feature); it can never reach the panel host.
-            if re.search(r"(^|[;&|]\s*)(?:sudo\s+)?(?:neofetch|fastfetch|skvm-fetch)(?:\s|$)", command):
-                try:
-                    sync_fetch_profile(v, timeout=20)
-                except Exception:
-                    pass  # the command output below still reports the real result
             rc, out = backend.exec_shell(v, command, timeout=60)
             audit("vps.run", v.name, command[:200])
             flash(f"$ {command}\n(exit {rc})\n{out[-3000:] or '(no output)'}", "console")
@@ -723,13 +707,6 @@ def register_routes(app):
             res = backend.resize(v, cpu, mem, disk) if v.state in ("running", "stopped") else {}
             db.update_vps(vps_id, vcpus=cpu, memory_mb=mem, disk_gb=disk)
             note = res.get("disk_note") if isinstance(res, dict) else None
-            fresh = db.get_vps(vps_id) or v
-            if fresh.state == "running":
-                try:
-                    sync_fetch_profile(fresh, timeout=20)
-                    note = ((note + " ") if note else "") + "SSH fetch profile refreshed — neofetch/fastfetch now show the new allocation."
-                except Exception as sync_exc:
-                    note = ((note + " ") if note else "") + f"Fetch profile refresh failed: {sync_exc}"
             audit("admin.vps_resize", v.name, f"{cpu}/{mem}/{disk}")
             flash("VPS resources updated." + (f" {note}" if note else ""), "success")
         except Exception as e:
@@ -881,14 +858,6 @@ def register_console(app):
         session_obj = {"vps_id": v.id, "user_id": current_user.id, "proc": None,
                        "sock": None, "fd": None, "exec_id": None, "backend": v.backend,
                        "name": v.name}
-        # Existing guests may predate the allocation fetch profile, and
-        # admins may have changed resources since provisioning. Refresh it
-        # before the shell opens so neofetch/fastfetch are correct.
-        fetch_sync_error = None
-        try:
-            sync_fetch_profile(v, timeout=20)
-        except Exception as sync_exc:
-            fetch_sync_error = str(sync_exc)[:300]
         try:
             if v.backend == "docker":
                 import docker as docker_sdk
@@ -921,9 +890,6 @@ def register_console(app):
         db.audit(current_user, "vps.console_open", v.name, "", request.remote_addr or "")
         socketio.emit("output", f"\x1b[38;5;245mConnected to {v.name} ({v.backend}). Type 'exit' to end the shell.\x1b[0m\r\n",
                       namespace="/console", to=request.sid)
-        if fetch_sync_error:
-            socketio.emit("output", f"\x1b[33mSKVM fetch profile could not be refreshed: {fetch_sync_error}\x1b[0m\r\n",
-                          namespace="/console", to=request.sid)
         return True
 
     def _pty_reader(sid, fd, proc):

@@ -83,4 +83,9 @@ def test_create_container_fallback_chain(monkeypatch):
     cid, notes = docker_engine.create_container("web-1", "ubuntu:22.04", 2, 2048, 25)
     assert cid == "fake-id-123"
     assert notes["disk_quota_enforced"] is False  # reported, not hidden
-    assert len(calls) == 2 and "storage_opt" in calls[0] and "storage_opt" not in calls[1]
+    assert "storage_opt" in calls[0] and "storage_opt" not in calls[-1]
+    if docker_engine._cpuset_for(2):  # first attempt also pins the cpuset
+        assert calls[0].get("cpuset_cpus") == docker_engine._cpuset_for(2)
+        assert len(calls) == 3
+    else:
+        assert len(calls) == 2

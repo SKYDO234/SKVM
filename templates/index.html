@@ -38,7 +38,7 @@
           <span><i data-lucide="circle-check"></i> Runtime verified before anything is created</span>
           <span><i data-lucide="circle-check"></i> CPU, RAM and storage limits enforced by the backend</span>
           <span><i data-lucide="circle-check"></i> SSH, tmate and root access configured in the guest</span>
-          <span><i data-lucide="circle-check"></i> neofetch shows your assigned vCPU, RAM and storage — not the host</span>
+          <span><i data-lucide="circle-check"></i> neofetch reads your VPS’s virtualized /proc — not the host</span>
           <span><i data-lucide="circle-check"></i> Live progress — success only when the server really boots</span>
         </div>
       </div>
@@ -69,7 +69,7 @@
 
   <section class="grid grid-3">
     <div class="card"><i data-lucide="shield-check" class="big-ic"></i><h3>Isolation you can verify</h3><p class="muted">Limits are applied by Docker, Podman or Incus — and the job receipt tells you when a storage quota could not be hard-enforced.</p></div>
-    <div class="card"><i data-lucide="terminal" class="big-ic"></i><h3>A terminal, not a toy</h3><p class="muted">The browser console attaches to the machine itself, and SKVM’s allocation-aware fetch makes <b>neofetch</b>/<b>fastfetch</b> report the resources your admin assigned. tmate gives you a real SSH string whenever you want external access.</p></div>
+    <div class="card"><i data-lucide="terminal" class="big-ic"></i><h3>A terminal, not a toy</h3><p class="muted">The browser console attaches to the machine itself. Guests get real SSH keys at provisioning, LXCFS virtualizes guest /proc so <b>neofetch</b>/<b>fastfetch</b> report your VPS limits, and tmate gives you a real SSH string whenever you want external access.</p></div>
     <div class="card"><i data-lucide="heart-pulse" class="big-ic"></i><h3>Monitoring without theatre</h3><p class="muted">Host health and guest usage are separate, labelled, and read from the source. If a backend is down, SKVM says so.</p></div>
   </section>
   <footer class="foot">SKVM Aura Glass OS · Real servers, honestly managed{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>

@@ -14,8 +14,8 @@
 | OS catalogue | Ubuntu 20.04 / 22.04 / 24.04, Debian 11 / 12, each mapped to its Incus and Docker image references. Admins can add or disable images. |
 | Resource enforcement | Server-side on every deploy: plan caps → admin sanity bounds → per-user quota → real node capacity (host CPU/RAM/disk). Docker receives `nano_cpus`/`mem_limit`; disk uses overlay2 `storage_opt.size` where the driver supports it (jobs report truthfully when it cannot). Incus receives `limits.cpu`, `limits.memory` and a sized root device. |
 | Console | Flask-SocketIO + xterm.js terminal attached to the server itself (`docker exec` TTY / `incus exec`). Latency is a measured SocketIO round-trip. Authentication and ownership are checked on connect, input and resize. |
-| SSH fetch | Provisioning installs SKVM’s allocation-aware fetch profile (`skvm-fetch`) and maps `neofetch`/`fastfetch` to it. The profile is refreshed on console open, server start/restart and admin resource changes, so those commands show the VPS’s assigned vCPU/RAM/disk (plus live guest facts) instead of host-node totals. `skvm-fetch --json` is available for scripts. |
-| SSH access | tmate is installed inside each guest at provisioning. Users start/stop sessions and receive the real connection string returned by the guest. Root passwords are generated per server, set with `chpasswd`, stored Fernet-encrypted, and resettable. |
+| Guest resource view | **LXCFS** virtualizes guest `/proc` (`cpuinfo`, `meminfo`, `uptime`, `stat`, …) from each container’s cgroup, so the real `neofetch`/`fastfetch`/`free` inside a VPS report its own CPU/RAM limits instead of host-node totals. Docker containers get the LXCFS proc files bind-mounted automatically (plus a `cpuset` matching the vCPU allocation, since a CPU quota alone does not change the visible CPU count); Incus uses the host’s LXCFS automatically. No panel-written fetch wrappers. The admin dashboard shows LXCFS status honestly when it is unavailable. |
+| SSH access | Provisioning installs OpenSSH + tmate and **creates the keys**: `ssh-keygen -A` host keys for sshd and a passphrase-less root identity (`id_ed25519`, RSA fallback) that tmate’s SSH client requires. Starting a session re-checks/creates missing keys (repairing older guests), waits a bounded time for tmate readiness, and returns the real connection string from the guest — or guest-side diagnostics when tmate.io is unreachable. Root passwords are generated per server, set with `chpasswd`, stored Fernet-encrypted, and resettable. |
 | Honest monitoring | Host figures are labelled as host figures. Per-server usage is read from the guest itself (daemon stats, `/proc`, `df`, `free`). Nothing is fabricated. |
 | Provisioning engine | Dedicated worker (`skvm-jobs`) with queued/running/done/error jobs, live progress polling, idempotent retry (existing instances are adopted, not duplicated), automatic cleanup of half-created instances, and a 60-second watchdog that re-syncs state with the backend. |
 | Admin console | Branding (site name, logo, accent colour, website/Discord links, support email), maintenance mode, registration toggle, users (role/plan/quota/suspend/password/delete), servers (create-for-user, live resize, delete/force-delete), nodes, plans, OS images, plus provisioning jobs, audit log and application log. |
@@ -171,6 +171,7 @@ All configuration is via `SKVM_*` environment variables (`.env` locally, `/etc/s
 | `SKVM_ADMIN_USERNAME` / `SKVM_ADMIN_PASSWORD` | `admin` / `admin123` | First-run admin only — change `admin123` immediately |
 | `SKVM_COOKIE_SECURE` | `false` | Enable behind HTTPS |
 | `SKVM_TRUST_PROXY` | auto (on in Codespaces/Gitpod/dev containers) | Trust `X-Forwarded-*` from a reverse proxy / hosted preview; set explicitly `true`/`false` to override the auto-detection |
+| `SKVM_LXCFS` | `true` | Virtualize guest `/proc` via LXCFS so guest fetch tools show per-VPS CPU/RAM. `install.sh` installs + enables it on systemd hosts; `run.sh`/entrypoint start it where FUSE is available. Set `false` to disable. In Codespaces the devcontainer has no FUSE device, so LXCFS stays off there (the admin page reports this) — use `install.sh` on a real host for virtualized guest stats |
 | `SKVM_ALLOW_REGISTRATION` | `true` | Public sign-ups (also toggleable in Admin) |
 
 Branding, plans, OS images, maintenance mode and quotas are runtime settings managed in **Admin → Control Room**, stored in the database — no code changes needed.
@@ -189,8 +190,8 @@ core/
   docker_engine.py   Docker backend (limits, exec, stats, cleanup)
   engine.py          Incus backend (containers + QEMU/KVM VMs)
   provision.py       provisioning pipeline + reconciliation
-  tmate.py           in-guest tmate install / start / stop
-  capabilities.py    host snapshot + Docker/Incus/KVM probes
+  tmate.py           in-guest tmate + SSH key creation / session start / stop
+  capabilities.py    host snapshot + Docker/Incus/KVM/LXCFS probes
   os_profiles.py     Ubuntu/Debian image catalogue
   crypto.py          Fernet encryption for guest root passwords
   extensions.py      Flask extension singletons

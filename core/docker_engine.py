@@ -86,6 +86,55 @@ def client_or_none():
         return None
 
 
+# ------------------------------------------------------------------ LXCFS
+# LXCFS virtualizes /proc for containers: values are computed from the
+# *reading* process's cgroup, so bind-mounting its proc files into a VPS
+# container makes free/neofetch/fastfetch report the container's own
+# CPU/memory limits instead of the host node's. It must be running on
+# the Docker daemon's host (install.sh does this on systemd hosts;
+# run.sh tries where FUSE is available). Honest fallback: no mounts.
+LXCFS_PROC_FILES = ("cpuinfo", "meminfo", "uptime", "stat", "swaps", "diskstats")
+
+
+def lxcfs_root() -> Path | None:
+    """Return the LXCFS mount root when it is actually populated."""
+    if (os.getenv("SKVM_LXCFS", "true") or "").strip().lower() in {"0", "false", "no", "off"}:
+        return None
+    root = Path((os.getenv("SKVM_LXCFS_PATH", "/var/lib/lxcfs") or "/var/lib/lxcfs").strip())
+    if (root / "proc" / "meminfo").exists() and (root / "proc" / "cpuinfo").exists():
+        return root
+    return None
+
+
+def _lxcfs_volumes() -> dict:
+    root = lxcfs_root()
+    if root is None:
+        return {}
+    volumes = {}
+    for name in LXCFS_PROC_FILES:
+        src = root / "proc" / name
+        if src.exists():
+            volumes[str(src)] = {"bind": f"/proc/{name}", "mode": "ro"}
+    return volumes
+
+
+def _cpuset_for(vcpus) -> str | None:
+    """cpuset string for the first N CPUs (pairs with LXCFS cpuinfo).
+
+    Docker's nano_cpus is a quota and does not change the CPU count a
+    guest sees; a cpuset does, and LXCFS reports exactly the cpuset.
+    Returns None when the request cannot be pinned safely.
+    """
+    try:
+        n = int(float(vcpus))
+    except (TypeError, ValueError):
+        return None
+    total = os.cpu_count() or 0
+    if n < 1 or total < 1 or n > total:
+        return None
+    return "0" if n == 1 else f"0-{n - 1}"
+
+
 def container_name(vps_name: str) -> str:
     return f"skvm-{safe_name(vps_name)}"
 
@@ -107,15 +156,25 @@ def create_container(name, image, vcpus, memory_mb, disk_gb):
     existing = _get(client, name)
     labels = {"skvm.managed": "true", "skvm.name": safe_name(name)}
     if existing is not None:
-        # Idempotent recovery after a panel/worker restart.
+        # Idempotent recovery after a panel/worker restart. Mounts cannot
+        # be added to an existing container, so LXCFS stays off until the
+        # container is recreated — reported, not hidden.
         try:
             existing.update(nano_cpus=int(float(vcpus) * 1_000_000_000),
                             mem_limit=f"{int(memory_mb)}m")
         except Exception:
             pass
+        cpuset = _cpuset_for(vcpus)
+        if cpuset:
+            try:
+                existing.update(cpuset_cpus=cpuset)
+            except Exception:
+                pass
         if existing.status != "running":
             existing.start()
-        return existing.id, {"adopted": True, "disk_quota_enforced": _quota_of(existing)}
+        return existing.id, {"adopted": True, "disk_quota_enforced": _quota_of(existing),
+                             "lxcfs": False}
+    volumes = _lxcfs_volumes()
     kwargs = dict(
         image=image, name=cname, hostname=safe_name(name), detach=True,
         tty=True, stdin_open=True, labels=labels,
@@ -124,11 +183,18 @@ def create_container(name, image, vcpus, memory_mb, disk_gb):
         # Keep the guest alive; sshd/tmate are started by provisioning.
         command=["/bin/bash", "-lc", "sleep infinity"],
     )
+    if volumes:
+        kwargs["volumes"] = volumes
     # Progressive fallback for runtimes with fewer knobs (e.g. Podman
     # compat API, vfs storage): quota first, then no-memswap. Every drop
     # is reported honestly in the returned notes.
-    attempts = [
-        (dict(kwargs, storage_opt={"size": f"{int(disk_gb)}G"}), True),
+    quota_kwargs = dict(kwargs, storage_opt={"size": f"{int(disk_gb)}G"})
+    attempts = []
+    cpuset = _cpuset_for(vcpus)
+    if cpuset:
+        attempts.append((dict(quota_kwargs, cpuset_cpus=cpuset), True))
+    attempts += [
+        (quota_kwargs, True),
         (dict(kwargs), False),
         ({k: v for k, v in kwargs.items() if k != "memswap_limit"}, False),
     ]
@@ -137,7 +203,7 @@ def create_container(name, image, vcpus, memory_mb, disk_gb):
         try:
             container = client.containers.run(**attempt)
             return container.id, {"adopted": False, "disk_quota_enforced": quota,
-                                  "runtime": runtime_name()}
+                                  "runtime": runtime_name(), "lxcfs": bool(volumes)}
         except Exception as exc:  # try the next, simpler shape
             last_exc = exc
     raise DockerEngineError(f"Container creation failed: {last_exc}")
@@ -255,6 +321,12 @@ def resize_container(name, vcpus, memory_mb, disk_gb):
         raise DockerEngineError(f"Container for {name} not found")
     c.update(nano_cpus=int(float(vcpus) * 1_000_000_000), mem_limit=f"{int(memory_mb)}m",
              memswap_limit=f"{int(memory_mb)}m")
+    cpuset = _cpuset_for(vcpus)
+    if cpuset:
+        try:
+            c.update(cpuset_cpus=cpuset)  # keeps LXCFS cpuinfo == allocation
+        except Exception:
+            pass
     st = instance_status(name)
     st["disk_quota_enforced"] = _quota_of(c)
     st["disk_note"] = ("Disk quota enforced by the storage driver."

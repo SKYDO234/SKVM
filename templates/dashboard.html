@@ -31,7 +31,7 @@
 </div>
 
 <section class="card">
-  <div class="card-head"><div><h2><i data-lucide="servers"></i> Your fleet</h2><p>Every status below is read live from Docker, Podman or Incus. Inside each server, <b>neofetch</b> and <b>fastfetch</b> show the exact allocation assigned here — never the host’s totals.</p></div>
+  <div class="card-head"><div><h2><i data-lucide="servers"></i> Your fleet</h2><p>Every status below is read live from Docker, Podman or Incus. Inside each server, real <b>neofetch</b> and <b>fastfetch</b> read the guest’s own LXCFS-virtualized /proc — your VPS limits, never the host’s totals.</p></div>
   <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New server</a></div>
   {% if vps %}
   <div class="fleet-grid" id="servers">

@@ -199,7 +199,7 @@ def test_provisioning_pipeline_with_mocked_backend(client, monkeypatch):
         assert decrypt_text(v2.root_password_enc)
 
 
-def test_admin_resize_refreshes_guest_fetch_profile(client, monkeypatch):
+def test_admin_resize_updates_allocation(client, monkeypatch):
     _register(client, "frank", "FrankPass123")
     with flask_app.app_context():
         owner = db.get_user_by_username("frank")
@@ -209,12 +209,7 @@ def test_admin_resize_refreshes_guest_fetch_profile(client, monkeypatch):
                                backend="docker", plan_id=_plan_id())
         db.update_vps(vps_id, state="running")
 
-    calls = []
-    import app as app_module
     monkeypatch.setattr(backend, "resize", lambda v, cpu, mem, disk: {})
-    monkeypatch.setattr(app_module, "sync_fetch_profile",
-                        lambda v, timeout=30: calls.append((v.vcpus, v.memory_mb, v.disk_gb, timeout)))
-
     admin = flask_app.test_client()
     _login(admin, "admin", "TestAdminPass123")
     page = admin.get("/admin/vps")
@@ -223,7 +218,9 @@ def test_admin_resize_refreshes_guest_fetch_profile(client, monkeypatch):
     r = admin.post(f"/admin/vps/{vps_id}/resources",
                    data={"csrf_token": token, "vcpus": 3, "memory": 3072, "disk": 45})
     assert r.status_code in (302, 303)
-    assert calls == [(3, 3072, 45, 20)]
+    with flask_app.app_context():
+        v = db.get_vps(vps_id)
+        assert (v.vcpus, v.memory_mb, v.disk_gb) == (3, 3072, 45)
 
 
 def test_console_requires_auth_and_ownership(client):

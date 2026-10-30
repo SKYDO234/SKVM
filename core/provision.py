@@ -14,7 +14,7 @@ from . import backend, db
 from .config import AUTO_UPDATE
 from .crypto import encrypt_text
 from .engine import EngineError
-from .fetch_profile import sync_fetch_profile
+from .tmate import KEY_SETUP_SCRIPT
 
 
 def _guest_prep(vps, root_password: str):
@@ -31,20 +31,23 @@ def _guest_prep(vps, root_password: str):
         "export DEBIAN_FRONTEND=noninteractive; set -e; "
         f"hostname {hn} 2>/dev/null || true; echo {hn} > /etc/hostname; "
         "apt-get update -y; "
-        "apt-get install -y sudo curl ca-certificates openssh-server tmate iproute2 procps; "
+        "apt-get install -y sudo curl ca-certificates openssh-server openssh-client tmate iproute2 procps; "
         "mkdir -p /var/run/sshd /root/.ssh; chmod 700 /root/.ssh; "
+        # SSH keys: host keys for sshd + a root identity for tmate (tmate
+        # refuses to connect without one). Never overwrites existing keys.
+        + KEY_SETUP_SCRIPT + "; "
         f"echo {pw} | chpasswd; "
         "sed -i 's/^#\\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null || true; "
         "(service ssh start 2>/dev/null || /usr/sbin/sshd 2>/dev/null || systemctl start ssh 2>/dev/null || true); "
+        # Real fetch tools, best effort: with LXCFS virtualizing /proc on
+        # the node, these report the guest's own limits. Never fatal.
+        "(apt-get install -y fastfetch >/dev/null 2>&1 || apt-get install -y neofetch >/dev/null 2>&1 || true); "
         + auto +
         "echo SKVM_GUEST_READY"
     )
     _, out = backend.exec_shell(vps, script, timeout=600)
     if "SKVM_GUEST_READY" not in out:
         raise EngineError(f"Guest preparation did not complete: {out[-800:]}")
-    # Make `neofetch` / `fastfetch` in SSH and the web console show the
-    # allocation assigned to this VPS, not the host node's resources.
-    sync_fetch_profile(vps, timeout=60)
 
 
 def run_job(job_id):
@@ -73,7 +76,8 @@ def run_job(job_id):
         if result.get("container_id"):
             db.update_vps(vps.id, container_id=result["container_id"])
         db.update_job(job_id, progress=40, message="Instance created — preparing guest",
-                      details={"step": "guest-prep", "disk_quota_enforced": result.get("disk_quota_enforced")})
+                      details={"step": "guest-prep", "disk_quota_enforced": result.get("disk_quota_enforced"),
+                               "lxcfs": result.get("lxcfs")})
         root_password = secrets.token_urlsafe(12)
         fresh = db.get_vps(vps.id)
         _guest_prep(fresh, root_password)
@@ -85,7 +89,8 @@ def run_job(job_id):
                       ip_address=st.get("ip"), last_error=None)
         db.update_job(job_id, status="done", progress=100, message="VPS ready",
                       details={"step": "complete", "ip": st.get("ip"), "backend": vps.backend,
-                               "disk_quota_enforced": result.get("disk_quota_enforced")})
+                               "disk_quota_enforced": result.get("disk_quota_enforced"),
+                               "lxcfs": result.get("lxcfs")})
     except Exception as exc:
         # Reliable cleanup: never leave a half-provisioned instance behind.
         if created_here:

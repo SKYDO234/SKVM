@@ -7,6 +7,7 @@
   <div class="metric glass"><small>Total VPS</small><b>{{ vps|length }}</b><span>{{ vps|selectattr('state','equalto','running')|list|length }} running</span></div>
   <div class="metric glass"><small>Node (host)</small><b>{{ caps.hostname }}</b><span>CPU {{ caps.cpu_percent }}% · RAM {{ caps.memory_percent }}%</span></div>
   <div class="metric glass"><small>Backends</small><b>{{ 'Docker ✓' if caps.docker.available else 'Docker ✗' }} · {{ 'Incus ✓' if caps.incus.available else 'Incus ✗' }}</b><span>KVM: {{ 'ready' if caps.kvm.ok else 'unavailable' }}</span></div>
+  <div class="metric glass"><small>Guest /proc (LXCFS)</small><b>{{ 'Virtualized ✓' if caps.lxcfs.ok else 'Unavailable' }}</b><span>{{ caps.lxcfs.message }}</span></div>
 </section>
 
 <div class="grid grid-2">
