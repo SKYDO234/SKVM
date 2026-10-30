@@ -127,6 +127,11 @@ install_container() {
   if [[ "$(id -u)" -eq 0 && -n "${SUDO_USER:-}" ]]; then
     echo "[SKVM] Tip: you ran with sudo — files will be root-owned. Prefer: bash install.sh (no sudo) in codespaces/containers."
   fi
+  if curl -fsS --max-time 3 "http://127.0.0.1:$PORT/healthz" >/dev/null 2>&1; then
+    echo "[SKVM] SKVM PANEL is already running on port $PORT — not starting a second copy."
+    echo "[SKVM] Open the existing panel (Codespaces: forwarded $PORT preview URL)."
+    exit 0
+  fi
   if [[ "$BACKGROUND" -eq 1 ]]; then
     mkdir -p data
     echo "[SKVM] Starting SKVM in the background (log: $APP_DIR/data/skvm-run.log)..."

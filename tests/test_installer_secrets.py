@@ -77,3 +77,17 @@ def test_ui_components_and_no_fake_nav():
     assert "Billing" not in base
     for tpl in (root / "templates").glob("*.html"):
         assert "return confirm(" not in tpl.read_text(), tpl.name
+
+
+def test_duplicate_panel_guard():
+    run = (ROOT / "run.sh").read_text()
+    assert "already running on port" in run and '"skvm-panel"' in run
+    install = (ROOT / "install.sh").read_text()
+    assert "already running on port" in install
+    # Guest prep must be lock-serialized and repair-retried (apt races
+    # were corrupting provisioning when two workers ran at once).
+    prov = (ROOT / "core" / "provision.py").read_text()
+    assert "Dpkg::Lock::Timeout" in prov and "skvm_apt" in prov and "flock" in prov
+    assert prov.count("SKVM_GUEST_READY") >= 2
+    runner = (ROOT / "job_runner.py").read_text()
+    assert "claim_job" in runner

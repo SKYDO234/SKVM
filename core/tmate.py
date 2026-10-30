@@ -44,13 +44,30 @@ def is_installed(vps) -> bool:
 
 
 def ensure_installed(vps):
-    """Install tmate in a Debian/Ubuntu guest if missing (idempotent)."""
+    """Install tmate in a Debian/Ubuntu guest if missing (idempotent).
+
+    Uses the same serialized, lock-waiting, repair-retrying apt helper
+    shape as provisioning so a busy or bruised package manager in the
+    guest does not turn into a spurious "tmate could not be installed".
+    """
     if is_installed(vps):
         return True
-    script = ("export DEBIAN_FRONTEND=noninteractive; "
-              "(apt-get update -y && apt-get install -y tmate openssh-client) "
-              "|| (apt-get install -y --no-install-recommends tmate openssh-client)")
-    backend.exec_shell(vps, script, timeout=420)
+    script = (
+        "export DEBIAN_FRONTEND=noninteractive; "
+        "APT=\"apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=30 "
+        "-o Dpkg::Lock::Timeout=240\"; "
+        "exec 9>/run/skvm-apt.lock 2>/dev/null || exec 9>/tmp/skvm-apt.lock; flock 9 || true; "
+        "for _try in 1 2 3; do "
+        "  dpkg --configure -a >/dev/null 2>&1 || true; "
+        "  apt-get clean >/dev/null 2>&1 || true; "
+        "  if $APT update -y >/dev/null 2>&1 && $APT install -y --fix-missing tmate openssh-client; then break; fi; "
+        "  sleep 5; "
+        "done; true"
+    )
+    try:
+        backend.exec_shell(vps, script, timeout=600)
+    except Exception:
+        pass
     return is_installed(vps)
 
 

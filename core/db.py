@@ -416,6 +416,26 @@ def get_job(job_id):
     return sqla.session.get(Job, int(job_id)) if job_id else None
 
 
+def claim_job(job_id) -> bool:
+    """Atomically claim a queued job (queued -> running).
+
+    Returns True only for the caller that won the claim. This is the
+    guard that stops two worker processes (e.g. a duplicate panel started
+    on the same database) from provisioning the same VPS at the same
+    time — concurrent guest-prep runs were corrupting apt state.
+    """
+    try:
+        updated = (sqla.session.query(Job)
+                   .filter_by(id=int(job_id), status="queued")
+                   .update({"status": "running", "updated_at": utcnow()},
+                           synchronize_session=False))
+        sqla.session.commit()
+        return updated == 1
+    except Exception:
+        sqla.session.rollback()
+        return False
+
+
 def list_active_jobs(limit=50):
     return (sqla.session.query(Job).filter(Job.status.in_(["queued", "running"]))
             .order_by(Job.id.desc()).limit(limit).all())

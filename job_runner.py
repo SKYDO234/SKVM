@@ -23,6 +23,11 @@ def pump(app):
     for jid in ids:
         if jid in INFLIGHT:
             continue
+        # Cross-process claim: only the worker that flips queued->running
+        # in the DB may run this job (protects against duplicate panels).
+        with app.app_context():
+            if not db.claim_job(jid):
+                continue
         INFLIGHT.add(jid)
 
         def _run(jid=jid):

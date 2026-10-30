@@ -144,6 +144,27 @@ def own_vps_or_404(vps_id):
     return v
 
 
+def refresh_vps_state(v):
+    """Re-sync a VPS record with the real backend state (best effort).
+
+    Used before console/tmate start so a stale `error`/`stopped` label in
+    the DB cannot block a guest that is actually running.
+    """
+    try:
+        st = backend.status(v)
+        real = st.get("state")
+        if real in ("running", "stopped"):
+            mapped = real
+            if v.state == "error" and not v.root_password_enc and real == "stopped":
+                mapped = "error"  # unprepared guest: keep the setup prompt
+            if mapped != v.state or st.get("ip"):
+                db.update_vps(v.id, state=mapped, ip_address=st.get("ip"))
+                v = db.get_vps(v.id) or v
+    except Exception:
+        pass
+    return v
+
+
 def validate_resources(vcpus, memory_mb, disk_gb, plan):
     """Server-side plan + sanity enforcement. Returns error string or None."""
     try:
@@ -385,6 +406,25 @@ def register_routes(app):
     @login_required
     def vps_action(vps_id, op):
         v = own_vps_or_404(vps_id)
+        if op == "start":
+            # Recovery path: if the instance is missing, or guest setup
+            # never completed (error state, no root password captured),
+            # Start re-runs provisioning instead of failing with
+            # "container not found" or booting an unprepared guest.
+            needs_setup = v.state == "error" and not v.root_password_enc
+            missing = False
+            if not needs_setup:
+                try:
+                    missing = backend.status(v).get("state") == "missing"
+                except Exception:
+                    missing = False
+            if needs_setup or missing:
+                db.update_vps(vps_id, state="creating", desired_state="running", last_error=None)
+                db.create_job(vps_id, "provision", "Queued recovery provisioning (Start pressed)")
+                audit("vps.recover", v.name)
+                flash("Re-running VPS setup — watch live progress here. "
+                      "The guest will be prepared and started automatically.", "info")
+                return redirect(url_for("admin_vps") if request.form.get("from_admin") else url_for("dashboard"))
         if op == "delete":
             force = request.form.get("force") == "1"
             try:
@@ -457,6 +497,7 @@ def register_routes(app):
         v = own_vps_or_404(vps_id)
         from core import tmate
         if op == "start":
+            v = refresh_vps_state(v)
             if v.state != "running":
                 flash("VPS must be running to start an SSH (tmate) session.", "warning")
             else:
@@ -867,6 +908,7 @@ def register_console(app):
         v = db.get_vps(vps_id)
         if not v or (v.user_id != current_user.id and not current_user.is_admin):
             return False
+        v = refresh_vps_state(v)
         if v.state != "running":
             socketio.emit("output", "\r\n\x1b[33mVPS is not running. Start it first, then reconnect.\x1b[0m\r\n",
                           namespace="/console", to=request.sid)
@@ -878,8 +920,8 @@ def register_console(app):
         try:
             if v.backend == "docker":
                 import docker as docker_sdk
-                client = docker_sdk.from_env(timeout=10)
-                from core.docker_engine import container_name
+                from core.docker_engine import container_name, resolve_endpoint
+                client = docker_sdk.DockerClient(base_url=resolve_endpoint(), timeout=10)
                 api = client.api
                 exec_id = api.exec_create(container_name(v.name), ["/bin/bash", "-l"],
                                           tty=True, stdin=True)["Id"]
