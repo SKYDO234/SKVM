@@ -235,3 +235,31 @@ def test_passwords_are_hashed():
         u = db.get_user_by_username("admin")
         assert u.password_hash != "TestAdminPass123"
         assert u.password_hash.startswith(("scrypt:", "pbkdf2:"))
+
+
+def test_reinstall_destroys_and_requeues_provision(client, monkeypatch):
+    _register(client, "gina", "GinaPass123")
+    with flask_app.app_context():
+        owner = db.get_user_by_username("gina")
+        node_id = db.list_nodes()[0].id
+        vps_id = db.create_vps(owner.id, node_id, "gina-1", "ubuntu-24.04",
+                               "container", 1, 1024, 15, "gina-1",
+                               backend="docker", plan_id=_plan_id())
+        db.update_vps(vps_id, state="running", ip_address="172.17.0.9")
+
+    removed = []
+    monkeypatch.setattr(backend, "remove_instance", lambda v: removed.append(v.name))
+    from core import tmate as tmate_mod
+    monkeypatch.setattr(tmate_mod, "stop_session", lambda v: None)
+
+    import re
+    page = client.get(f"/vps/{vps_id}")
+    token = re.search(rb'name="csrf_token" value="([^"]+)"', page.data).group(1).decode()
+    r = client.post(f"/vps/{vps_id}/reinstall", data={"csrf_token": token})
+    assert r.status_code in (302, 303)
+    assert removed == ["gina-1"]
+    with flask_app.app_context():
+        v = db.get_vps(vps_id)
+        assert v.state == "creating" and v.ip_address is None
+        jobs = db.list_jobs_for_vps(vps_id, 5)
+        assert jobs and jobs[0].kind == "provision" and "reinstall" in jobs[0].message.lower()

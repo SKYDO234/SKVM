@@ -33,10 +33,10 @@
       <button class="btn btn-small" type="submit">Apply</button></form></td>
     <td><div class="flex gap-2">
       <a class="btn btn-small" href="{{ url_for('vps_console', vps_id=v.id) }}">Console</a>
-      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" onsubmit="return confirm('Delete {{ v.name }}?')">
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" data-confirm='Delete {{ v.name }}?'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="from_admin" value="1">
         <button class="btn btn-small btn-danger" type="submit">Delete</button></form>
-      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" onsubmit="return confirm('FORCE delete {{ v.name }} record even if backend cleanup fails?')">
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='delete') }}" data-confirm='FORCE delete {{ v.name }} record even if backend cleanup fails?'>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="from_admin" value="1"><input type="hidden" name="force" value="1">
         <button class="btn btn-small" type="submit">Force</button></form>
     </div></td>

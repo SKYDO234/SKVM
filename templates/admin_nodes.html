@@ -38,7 +38,7 @@
     <small class="muted">Last seen: {{ n.last_seen or '—' }} · Token is stored server-side and never shown.</small>
     <div class="flex gap-2 mt-2">
       <button class="btn btn-small" name="op" value="save:{{ n.id }}" type="submit">Save</button>
-      <button class="btn btn-small btn-danger" name="op" value="delete:{{ n.id }}" type="submit" onclick="return confirm('Delete node {{ n.name }}?')">Delete</button>
+      <button class="btn btn-small btn-danger" name="op" value="delete:{{ n.id }}" type="submit" data-confirm='Delete node {{ n.name }}?'>Delete</button>
     </div>
   </form>
   {% else %}<div class="empty">No nodes.</div>{% endfor %}

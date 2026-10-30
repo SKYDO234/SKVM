@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
-{% block title %}{{ brand.site_name }} — Aura Glass OS for VPS{% endblock %}
+{% block title %}{{ brand.site_name }} — Nebula Glass for VPS{% endblock %}
 {% block public %}
 <div class="public-wrap">
   <header class="public-nav">
     <a class="brand" href="{{ url_for('index') }}">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
       {% else %}<span class="brand-mark">S</span>{% endif %}
-      <span><b>SKVM</b><small>AURA GLASS OS</small></span>
+      <span><b>SKVM</b><small>NEBULA GLASS</small></span>
     </a>
     <nav>
       {% if brand.discord_url %}<a href="{{ brand.discord_url }}" target="_blank" rel="noopener">Community</a>{% endif %}
@@ -17,7 +17,7 @@
 
   <section class="hero">
     <div>
-      <span class="hero-pill"><span class="live-dot" style="margin:0"></span> SKVM AURA GLASS OS · VPS, REIMAGINED</span>
+      <span class="hero-pill"><span class="live-dot" style="margin:0"></span> SKVM NEBULA GLASS · VPS, REIMAGINED</span>
       <h2>Cloud power,<br><span class="grad">crystal clear.</span></h2>
       <p>{{ brand.tagline or 'Launch real Ubuntu and Debian machines with hard limits, a glass-smooth control plane, a terminal in your browser, SSH when you need it, and monitoring that tells the truth.' }}</p>
       <div class="flex gap-3 flex-wrap mt-6">
@@ -72,6 +72,6 @@
     <div class="card"><i data-lucide="terminal" class="big-ic"></i><h3>A terminal, not a toy</h3><p class="muted">The browser console attaches to the machine itself. Guests get real SSH keys at provisioning, LXCFS virtualizes guest /proc so <b>neofetch</b>/<b>fastfetch</b> report your VPS limits, and tmate gives you a real SSH string whenever you want external access.</p></div>
     <div class="card"><i data-lucide="heart-pulse" class="big-ic"></i><h3>Monitoring without theatre</h3><p class="muted">Host health and guest usage are separate, labelled, and read from the source. If a backend is down, SKVM says so.</p></div>
   </section>
-  <footer class="foot">SKVM Aura Glass OS · Real servers, honestly managed{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
+  <footer class="foot">SKVM Nebula Glass · Real servers, honestly managed{% if brand.support_email %} · <a href="mailto:{{ brand.support_email }}">{{ brand.support_email }}</a>{% endif %}</footer>
 </div>
 {% endblock %}

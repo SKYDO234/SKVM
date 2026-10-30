@@ -29,7 +29,7 @@
     </div>
     <div class="flex gap-2 mt-2">
       <button class="btn btn-small" name="op" value="save:{{ p.id }}" type="submit">Save</button>
-      <button class="btn btn-small btn-danger" name="op" value="delete:{{ p.id }}" type="submit" onclick="return confirm('Delete plan {{ p.name }}?')">Delete</button>
+      <button class="btn btn-small btn-danger" name="op" value="delete:{{ p.id }}" type="submit" data-confirm='Delete plan {{ p.name }}?'>Delete</button>
     </div>
   </form>
   {% else %}<div class="empty">No plans.</div>{% endfor %}

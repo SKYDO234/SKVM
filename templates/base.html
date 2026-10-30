@@ -22,40 +22,48 @@
 <div class="ambient" aria-hidden="true"><span></span><span></span><span></span></div>
 
 {% if current_user.is_authenticated %}
-<div class="shell">
+<div class="shell" id="shell">
   <aside class="sidebar" id="sidebar">
     <a class="brand" href="{{ url_for('dashboard') }}" aria-label="SKVM home">
       {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="" class="brand-logo">
       {% else %}<span class="brand-mark">S</span>{% endif %}
-      <span><b>SKVM</b><small>AURA GLASS OS</small></span>
+      <span><b>SKVM</b><small>NEBULA GLASS</small></span>
     </a>
 
     <a class="launch-cta" href="{{ url_for('create_vps') }}"><i data-lucide="rocket"></i><span>Launch instance</span><i data-lucide="arrow-up-right" class="cta-arrow"></i></a>
 
     <nav class="nav" aria-label="Primary">
       <span class="nav-label">Workspace</span>
-      <a class="nav-link {{ 'active' if request.endpoint=='dashboard' }}" href="{{ url_for('dashboard') }}"><i data-lucide="layout-grid"></i><span>Command Center</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='create_vps' }}" href="{{ url_for('create_vps') }}"><i data-lucide="sparkles"></i><span>Launch Instance</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='profile' }}" href="{{ url_for('profile') }}"><i data-lucide="circle-user-round"></i><span>Profile</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='dashboard' }}" href="{{ url_for('dashboard') }}"><i data-lucide="layout-dashboard"></i><span>Overview</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint in ('vps_detail','vps_console') }}" href="{{ url_for('dashboard') }}#fleet"><i data-lucide="servers"></i><span>My VPS</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='create_vps' }}" href="{{ url_for('create_vps') }}"><i data-lucide="plus-circle"></i><span>Create VPS</span></a>
+      <a class="nav-link" href="{{ url_for('dashboard') }}#activity"><i data-lucide="activity"></i><span>Activity</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='profile' }}" href="{{ url_for('profile') }}"><i data-lucide="settings"></i><span>Settings</span></a>
+      {% if brand.discord_url or brand.website_url %}
+      <span class="nav-label">Help</span>
+      {% if brand.discord_url %}<a class="nav-link" href="{{ brand.discord_url }}" target="_blank" rel="noopener"><i data-lucide="life-buoy"></i><span>Support</span></a>{% endif %}
+      {% if brand.website_url %}<a class="nav-link" href="{{ brand.website_url }}" target="_blank" rel="noopener"><i data-lucide="globe"></i><span>Website</span></a>{% endif %}
+      {% endif %}
       {% if current_user.is_admin %}
-      <span class="nav-label">Control Room</span>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin' }}" href="{{ url_for('admin') }}"><i data-lucide="sliders-horizontal"></i><span>Control Room</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_users' }}" href="{{ url_for('admin_users') }}"><i data-lucide="users-round"></i><span>People</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_vps' }}" href="{{ url_for('admin_vps') }}"><i data-lucide="servers"></i><span>All Servers</span></a>
+      <span class="nav-label">Administration</span>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin' }}" href="{{ url_for('admin') }}"><i data-lucide="sliders-horizontal"></i><span>Admin overview</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_users' }}" href="{{ url_for('admin_users') }}"><i data-lucide="users-round"></i><span>Users</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_vps' }}" href="{{ url_for('admin_vps') }}"><i data-lucide="server-cog"></i><span>All VPS</span></a>
       <a class="nav-link {{ 'active' if request.endpoint=='admin_nodes' }}" href="{{ url_for('admin_nodes') }}"><i data-lucide="waypoints"></i><span>Nodes</span></a>
       <a class="nav-link {{ 'active' if request.endpoint=='admin_plans' }}" href="{{ url_for('admin_plans') }}"><i data-lucide="layers-3"></i><span>Plans</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_os_images' }}" href="{{ url_for('admin_os_images') }}"><i data-lucide="disc-album"></i><span>OS Library</span></a>
-      <a class="nav-link {{ 'active' if request.endpoint=='admin_logs' }}" href="{{ url_for('admin_logs') }}"><i data-lucide="activity"></i><span>Jobs & Logs</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_os_images' }}" href="{{ url_for('admin_os_images') }}"><i data-lucide="disc-album"></i><span>OS images</span></a>
+      <a class="nav-link {{ 'active' if request.endpoint=='admin_logs' }}" href="{{ url_for('admin_logs') }}"><i data-lucide="scroll-text"></i><span>Jobs &amp; logs</span></a>
       {% endif %}
     </nav>
 
     <div class="side-foot">
+      <button class="sb-toggle" id="sbToggle" type="button" title="Collapse / expand sidebar"><i data-lucide="chevrons-left"></i><span>Collapse</span></button>
       <div class="user-chip"><span class="avatar">{{ current_user.username[0]|upper }}</span>
         <span class="min-w-0"><b class="truncate">{{ current_user.username }}</b><small>{{ current_user.role }} account</small></span>
         <span class="live-dot" title="Signed in"></span></div>
       <form method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-ghost w-full" type="submit"><i data-lucide="log-out"></i> Sign out</button>
+        <button class="btn btn-ghost w-full" type="submit"><i data-lucide="log-out"></i><span>Sign out</span></button>
       </form>
     </div>
   </aside>
@@ -64,12 +72,12 @@
     <header class="topbar">
       <button class="icon-btn" id="menuBtn" aria-label="Open menu"><i data-lucide="menu"></i></button>
       <div class="min-w-0 title-block">
-        <span class="eyebrow">{% block eyebrow %}SKVM AURA{% endblock %}</span>
-        <h1 class="truncate">{% block heading %}Command Center{% endblock %}</h1>
+        <span class="eyebrow">{% block eyebrow %}SKVM PANEL{% endblock %}</span>
+        <h1 class="truncate">{% block heading %}Overview{% endblock %}</h1>
       </div>
       <div class="top-actions">
-        <a class="btn btn-primary top-launch" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New server</a>
-        {% if brand.discord_url %}<a class="icon-btn" href="{{ brand.discord_url }}" target="_blank" rel="noopener" title="Discord"><i data-lucide="messages-square"></i></a>{% endif %}
+        <a class="btn btn-primary top-launch" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New VPS</a>
+        {% if brand.discord_url %}<a class="icon-btn" href="{{ brand.discord_url }}" target="_blank" rel="noopener" title="Discord support"><i data-lucide="messages-square"></i></a>{% endif %}
         {% if brand.website_url %}<a class="icon-btn" href="{{ brand.website_url }}" target="_blank" rel="noopener" title="Website"><i data-lucide="globe"></i></a>{% endif %}
         <span class="user-pill"><span class="live-dot"></span>{{ current_user.username }}</span>
       </div>
@@ -83,7 +91,7 @@
     {% endif %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}<div class="flash-stack">
+    {% if messages %}<div class="flash-stack" role="status">
       {% for cat, msg in messages %}
       {% if cat == 'console' %}<pre class="flash flash-console">{{ msg }}</pre>
       {% else %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endif %}
@@ -92,12 +100,15 @@
     {% endwith %}
 
     {% block content %}{% endblock %}
-    <footer class="foot">SKVM Aura Glass OS · Crafted for fast, honest infrastructure · {{ timezone }}</footer>
+    <footer class="foot">SKVM PANEL · Nebula Glass · Real infrastructure, honestly reported · {{ timezone }}</footer>
   </main>
 </div>
 {% else %}
   {% block public %}{% endblock %}
 {% endif %}
+
+<div class="toast-stack" id="toastStack" aria-live="polite"></div>
+<div id="modalRoot"></div>
 
 <script src="{{ url_for('static', filename='js/skvm.js') }}"></script>
 <script>if (window.lucide) lucide.createIcons();</script>

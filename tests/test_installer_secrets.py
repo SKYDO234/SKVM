@@ -50,13 +50,30 @@ def test_env_example_documents_defaults():
 def test_new_ui_identity():
     base = (ROOT / "templates" / "base.html").read_text()
     css = (ROOT / "static" / "css" / "skvm.css").read_text()
-    assert "Command Center" in base
+    assert "Overview" in base
     assert "Launch instance" in base
     assert "default_pw_warning" in base
-    assert "AURA GLASS OS" in base
+    assert "NEBULA GLASS" in base
     assert "Sora" in base
-    assert "#67e8f9" in css
-    assert "backdrop-filter:blur(22px)" in css
-    assert "glassmorphic" in css
+    assert "#38bdf8" in css      # electric blue
+    assert "#a855f7" in css      # violet accent
+    assert "backdrop-filter:blur" in css
     assert "#b8f135" not in css
     assert "#5e6ad2" not in css
+    assert "#67e8f9" not in css  # previous Aura identity fully retired
+
+
+def test_ui_components_and_no_fake_nav():
+    import pathlib
+    root = pathlib.Path(__file__).resolve().parents[1]
+    base = (root / "templates" / "base.html").read_text()
+    dash = (root / "templates" / "dashboard.html").read_text()
+    js = (root / "static" / "js" / "skvm.js").read_text()
+    # Reusable components exist: toasts, confirm modal, skeletons, sparklines.
+    assert "toastStack" in base and "modalRoot" in base
+    assert "data-confirm" in dash and "drawSpark" in js
+    assert "fleetSearch" in dash and "skeleton" in dash
+    # No fake billing nav (no billing backend exists), no inline confirm().
+    assert "Billing" not in base
+    for tpl in (root / "templates").glob("*.html"):
+        assert "return confirm(" not in tpl.read_text(), tpl.name

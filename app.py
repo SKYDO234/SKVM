@@ -400,6 +400,23 @@ def register_routes(app):
             audit("vps.delete", v.name, f"force={force}")
             flash("VPS deleted.", "success")
             return redirect(url_for("admin_vps") if request.form.get("from_admin") else url_for("dashboard"))
+        if op == "reinstall":
+            # Real reinstall: destroy the instance, then re-run the same
+            # provisioning pipeline (fresh guest, new root password).
+            try:
+                backend.remove_instance(v)
+            except Exception as e:
+                flash(f"Reinstall aborted — the current instance could not be removed: {e}", "danger")
+                return redirect(url_for("vps_detail", vps_id=vps_id))
+            from core import tmate
+            tmate.stop_session(v)
+            db.update_vps(vps_id, state="creating", container_id=None, ip_address=None,
+                          tmate_ssh=None, tmate_web=None, last_error=None, desired_state="running")
+            db.create_job(vps_id, "provision", "Queued for reinstall")
+            audit("vps.reinstall", v.name)
+            flash("Reinstall started — the VPS is being rebuilt from its OS image. "
+                  "A new root password will be generated; live progress shows on your dashboard.", "info")
+            return redirect(url_for("dashboard"))
         if op not in ("start", "stop", "restart"):
             abort(404)
         try:
