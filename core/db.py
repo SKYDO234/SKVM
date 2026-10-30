@@ -82,10 +82,11 @@ def init_db():
         if sqla.session.get(Setting, key) is None:
             sqla.session.add(Setting(key=key, value=value))
     # Rebrand migration: panels still on a previous default accent move
-    # to the SKVM Aura cyan identity (custom admin colours are untouched).
+    # to the SKVM Nebula electric-blue identity (custom admin colours
+    # are untouched).
     _accent = sqla.session.get(Setting, "accent")
-    if _accent is not None and _accent.value in {"#5e6ad2", "#b8f135"}:
-        _accent.value = "#67e8f9"
+    if _accent is not None and _accent.value in {"#5e6ad2", "#b8f135", "#67e8f9"}:
+        _accent.value = "#38bdf8"
     if not sqla.session.query(Plan).first():
         for name, cpu, mem, disk, maxv in _PLANS:
             sqla.session.add(Plan(name=name, max_vcpus=cpu, max_memory_mb=mem,

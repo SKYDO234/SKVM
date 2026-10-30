@@ -36,7 +36,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="op" value="password">
           <input type="password" name="new_password" minlength="8" placeholder="new password" required>
           <button class="btn btn-small" type="submit">Set password</button></form>
-        <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" onsubmit="return confirm('Delete {{ u.username }} and all their VPS?')">
+        <form method="post" action="{{ url_for('admin_user_update', user_id=u.id) }}" data-confirm='Delete {{ u.username }} and all their VPS?'>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="op" value="delete">
           <button class="btn btn-small btn-danger" type="submit"><i data-lucide="trash-2"></i></button></form>
       </div></td>

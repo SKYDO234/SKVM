@@ -1,6 +1,6 @@
 # SKVM PANEL
 
-**SKVM PANEL — Aura Glass OS.** A VPS hosting and management platform with a glassmorphic user/admin experience, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
+**SKVM PANEL — Nebula Glass.** A VPS hosting and management platform with a glassmorphic user/admin experience, real provisioning with hard resource limits, a live browser console, and tmate SSH access. Built exclusively for virtual servers — no game-hosting features, no simulated data.
 
 ![Stack](https://img.shields.io/badge/stack-Python%20%C2%B7%20Flask%20%C2%B7%20Docker%20%2B%20Incus-67e8f9)
 

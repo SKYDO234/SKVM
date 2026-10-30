@@ -1,24 +1,26 @@
 {% extends 'base.html' %}
-{% block heading %}Command Center{% endblock %}
+{% block heading %}Overview{% endblock %}
 {% block eyebrow %}LIVE OVERVIEW{% endblock %}
 {% block content %}
+{% set running = vps|selectattr('state','equalto','running')|list %}
+{% set stopped = vps|rejectattr('state','equalto','running')|list %}
 <section class="command-hero">
   <div>
-    <span class="eyebrow">SKVM AURA GLASS OS</span>
+    <span class="eyebrow">SKVM NEBULA GLASS</span>
     <h2>Hello, {{ current_user.username }}.</h2>
     <p>{% if plan %}You're on the <b>{{ plan.name }}</b> plan. {% endif %}Your infrastructure, live from the backend — launch, power, console and SSH from one place.</p>
   </div>
   <div class="hero-actions">
     <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="rocket"></i> Launch instance</a>
-    <a class="btn" href="{{ url_for('profile') }}"><i data-lucide="circle-user-round"></i> Profile</a>
+    <a class="btn" href="#fleet"><i data-lucide="servers"></i> My VPS</a>
   </div>
 </section>
 
 <section class="grid grid-4">
-  <div class="metric"><small><i data-lucide="servers"></i> Servers</small><b>{{ vps|length }}</b><span>{% if plan %}{{ plan.name }} · up to {{ plan.max_vps }} servers{% else %}Quota: {{ current_user.max_vps }}{% endif %}</span></div>
-  <div class="metric"><small><i data-lucide="cpu"></i> vCPU allocated</small><b>{{ usage.vcpus }}</b><span>across your fleet</span></div>
-  <div class="metric"><small><i data-lucide="memory-stick"></i> Memory allocated</small><b>{{ usage.memory_mb }}<small style="display:inline;font:inherit;letter-spacing:0"> MiB</small></b><span>{{ usage.disk_gb }} GiB storage reserved</span></div>
-  <div class="metric"><small><i data-lucide="waypoints"></i> Node</small><b style="font-size:25px;padding-top:8px">{{ caps.hostname }}</b><span>Host CPU {{ caps.cpu_percent }}% · RAM {{ caps.memory_percent }}%</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="servers"></i></span><small>Total VPS</small><b>{{ vps|length }}</b><span>{% if plan %}{{ plan.name }} plan · up to {{ plan.max_vps }} instances{% else %}Quota: {{ current_user.max_vps }} instances{% endif %}</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="play"></i></span><small>Running</small><b>{{ running|length }}</b><span>{{ stopped|length }} stopped · states read live from the runtime</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="cpu"></i></span><small>CPU allocated</small><b>{{ usage.vcpus }}<span class="unit"> vCPU</span></b><span>{{ usage.memory_mb }} MiB RAM · {{ usage.disk_gb }} GiB disk reserved</span>{% if plan %}<div class="usage-bar"><i style="width:{{ [100, (usage.vcpus / plan.max_vcpus * 100) if plan.max_vcpus else 0]|min }}%"></i></div><span>of {{ plan.max_vcpus }} vCPU plan limit</span>{% endif %}</div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="waypoints"></i></span><small>Node</small><b style="font-size:21px;padding-top:9px">{{ caps.hostname }}</b><span>Host CPU {{ caps.cpu_percent }}% · RAM {{ caps.memory_percent }}% · {{ caps.docker.runtime if caps.docker.runtime else 'Docker' }} {{ 'ready' if caps.docker.available else 'offline' }}</span></div>
 </section>
 
 <div id="jobsBox">
@@ -30,44 +32,102 @@
 {% endfor %}
 </div>
 
-<section class="card">
-  <div class="card-head"><div><h2><i data-lucide="servers"></i> Your fleet</h2><p>Every status below is read live from Docker, Podman or Incus. Inside each server, real <b>neofetch</b> and <b>fastfetch</b> read the guest’s own LXCFS-virtualized /proc — your VPS limits, never the host’s totals.</p></div>
-  <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New server</a></div>
+<div class="grid" style="grid-template-columns:2fr 1fr">
+<section class="card" style="margin-bottom:0">
+  <div class="card-head"><div><h2><i data-lucide="chart-line"></i> Live fleet usage</h2><p>Real CPU / memory samples polled from your running servers every few seconds — nothing is estimated or simulated.</p></div>
+  <span class="badge" id="chartState">{% if running %}sampling…{% else %}no running VPS{% endif %}</span></div>
+  {% if running %}
+  <div class="chart-wrap"><canvas class="spark" id="fleetChart" height="92"></canvas></div>
+  <div class="chart-legend"><span><i style="background:#38bdf8"></i>CPU <b id="cpuNow">—</b></span><span><i style="background:#a855f7"></i>Memory <b id="memNow">—</b></span><span class="muted">averaged across running servers</span></div>
+  {% else %}
+  <div class="empty"><i data-lucide="chart-line"></i><p>No running servers to sample. Start a VPS and its real usage will chart here.</p></div>
+  {% endif %}
+</section>
+
+<section class="card" style="margin-bottom:0">
+  <div class="card-head"><div><h2><i data-lucide="zap"></i> Quick actions</h2></div></div>
+  <div class="quick-grid">
+    <a class="quick-action" href="{{ url_for('create_vps') }}"><i data-lucide="rocket"></i><span>Launch a new VPS<small>Ubuntu / Debian, sized to your plan</small></span><i data-lucide="arrow-right"></i></a>
+    <a class="quick-action" href="#fleet"><i data-lucide="terminal"></i><span>Open a console<small>Browser terminal into any running server</small></span><i data-lucide="arrow-right"></i></a>
+    <a class="quick-action" href="{{ url_for('profile') }}"><i data-lucide="circle-user-round"></i><span>Profile &amp; security<small>Password and account settings</small></span><i data-lucide="arrow-right"></i></a>
+    {% if current_user.is_admin %}<a class="quick-action" href="{{ url_for('admin') }}"><i data-lucide="sliders-horizontal"></i><span>Admin overview<small>Users, nodes, plans and logs</small></span><i data-lucide="arrow-right"></i></a>{% endif %}
+  </div>
+</section>
+</div>
+
+<section class="card" id="fleet">
+  <div class="card-head"><div><h2><i data-lucide="servers"></i> My VPS</h2><p>Every status is read live from Docker, Podman or Incus. Inside each server, real <b>neofetch</b>/<b>fastfetch</b> read the guest’s LXCFS-virtualized /proc — your VPS limits, never the host’s totals.</p></div>
+  <a class="btn btn-primary" href="{{ url_for('create_vps') }}"><i data-lucide="plus"></i> New VPS</a></div>
   {% if vps %}
+  <div class="fleet-tools">
+    <div class="search-box"><i data-lucide="search"></i><input id="fleetSearch" type="search" placeholder="Search by name, OS or IP…" aria-label="Search VPS"></div>
+    <div class="chip-row" id="fleetFilters">
+      <button class="chip active" type="button" data-filter="all">All</button>
+      <button class="chip" type="button" data-filter="running">Running</button>
+      <button class="chip" type="button" data-filter="stopped">Stopped</button>
+      <button class="chip" type="button" data-filter="error">Attention</button>
+    </div>
+    <span class="muted text-sm" id="fleetCount">{{ vps|length }} shown</span>
+  </div>
   <div class="fleet-grid" id="servers">
   {% for v in vps %}
-  <article class="server-card">
+  <article class="server-card" data-vps-card data-name="{{ v.name|lower }}" data-state="{{ v.state }}" data-search="{{ (v.name ~ ' ' ~ v.os_slug ~ ' ' ~ (v.ip_address or ''))|lower }}">
     <div class="sc-head"><span class="state state-{{ v.state }}"></span>
       <div class="min-w-0"><a class="vps-name" href="{{ url_for('vps_detail', vps_id=v.id) }}">{{ v.name }}</a>
       <small>{{ v.os_slug }} · {{ v.backend }}{% if v.engine=='vm' %} VM{% else %} container{% endif %}<br>{{ v.ip_address or 'IP pending' }}</small></div>
       <span class="badge badge-{{ v.state }} ml-auto">{{ v.state }}</span></div>
     <div class="specs"><span><i data-lucide="cpu"></i>{{ v.vcpus }} vCPU</span><span><i data-lucide="memory-stick"></i>{{ v.memory_mb }} MiB</span><span><i data-lucide="hard-drive"></i>{{ v.disk_gb }} GiB</span></div>
+    {% if v.state == 'running' %}
+    <div class="sc-stats" data-live-stats="{{ v.id }}">
+      <div class="sc-stat"><span>CPU</span><div class="usage-bar" style="margin:0"><i data-role="cpu-bar" style="width:0%"></i></div><b data-role="cpu-val"><span class="skeleton" style="display:inline-block;width:34px"></span></b></div>
+      <div class="sc-stat"><span>RAM</span><div class="usage-bar" style="margin:0"><i data-role="mem-bar" style="width:0%"></i></div><b data-role="mem-val"><span class="skeleton" style="display:inline-block;width:34px"></span></b></div>
+    </div>
+    {% endif %}
     <div class="row-actions sc-actions">
       <a class="btn btn-small btn-primary" href="{{ url_for('vps_detail', vps_id=v.id) }}"><i data-lucide="settings-2"></i> Manage</a>
       <a class="btn btn-small" href="{{ url_for('vps_console', vps_id=v.id) }}"><i data-lucide="terminal"></i> Console</a>
-      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='start') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Start"><i data-lucide="play"></i></button></form>
-      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='restart') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Restart"><i data-lucide="rotate-cw"></i></button></form>
-      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='stop') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Stop"><i data-lucide="square"></i></button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='start') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Start" aria-label="Start {{ v.name }}"><i data-lucide="play"></i></button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='restart') }}" data-confirm="Restart {{ v.name }}? Running processes will be interrupted."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Restart" aria-label="Restart {{ v.name }}"><i data-lucide="rotate-cw"></i></button></form>
+      <form method="post" action="{{ url_for('vps_action', vps_id=v.id, op='stop') }}" data-confirm="Stop {{ v.name }}? It will go offline until started again."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="icon-btn" title="Stop" aria-label="Stop {{ v.name }}"><i data-lucide="square"></i></button></form>
     </div>
   </article>
   {% endfor %}
   </div>
+  <div class="empty hidden" id="fleetEmpty"><i data-lucide="search-x"></i><p>No servers match your search.</p></div>
   {% else %}
   <div class="empty"><i data-lucide="server-off"></i><p>No servers yet. Your first instance is about a minute away.</p><a class="btn btn-primary" href="{{ url_for('create_vps') }}">Launch your first server</a></div>
   {% endif %}
 </section>
 
-<section class="card">
-  <div class="card-head"><div><h2><i data-lucide="heart-pulse"></i> Node health</h2><p>Host figures, clearly labelled — your per-server usage lives on each server page.</p></div>
+<div class="grid grid-2">
+<section class="card" style="margin-bottom:0" id="activity">
+  <div class="card-head"><div><h2><i data-lucide="history"></i> Recent activity</h2><p>Provisioning and lifecycle jobs for your servers.</p></div></div>
+  {% if jobs %}
+  <div class="activity-list">
+    {% for j in jobs[:6] %}
+    <div class="activity-item"><span class="a-ic"><i data-lucide="{{ 'check' if j.status=='done' else 'x' if j.status=='error' else 'loader-circle' }}"></i></span>
+      <div class="min-w-0"><b>Job #{{ j.id }} · {{ j.kind }}</b><small>{{ j.message }} · {{ j.updated_at }}</small></div>
+      <span class="badge badge-{{ j.status }} ml-auto">{{ j.status }}</span></div>
+    {% endfor %}
+  </div>
+  {% else %}<div class="empty"><i data-lucide="history"></i><p>No activity yet — your jobs will appear here.</p></div>{% endif %}
+</section>
+
+<section class="card" style="margin-bottom:0">
+  <div class="card-head"><div><h2><i data-lucide="heart-pulse"></i> Node health</h2><p>Host figures, clearly labelled — per-server usage lives on each server.</p></div>
   <button class="btn btn-small" id="refreshNode" type="button"><i data-lucide="refresh-cw"></i> Refresh</button></div>
-  <div class="grid grid-4" id="nodeStats">
+  <div class="grid grid-2" id="nodeStats">
     <div class="mini-stat"><small>Host CPU</small><b data-k="cpu">{{ caps.cpu_count }} cores · {{ caps.cpu_percent }}%</b></div>
     <div class="mini-stat"><small>Host RAM</small><b data-k="ram">{{ caps.memory_used_mb }} / {{ caps.memory_total_mb }} MiB</b></div>
     <div class="mini-stat"><small>Host disk</small><b data-k="disk">{{ caps.disk_used_gb }} / {{ caps.disk_total_gb }} GiB</b></div>
-    <div class="mini-stat"><small>Runtime</small><b data-k="backends">{{ caps.docker.runtime }} · {{ 'ready' if caps.docker.available else 'offline' }} / Incus · {{ 'ready' if caps.incus.available else 'offline' }}</b></div>
+    <div class="mini-stat"><small>Guest /proc (LXCFS)</small><b data-k="lxcfs">{{ 'Virtualized' if caps.lxcfs.ok else 'Unavailable' }}</b></div>
   </div>
 </section>
+</div>
 {% endblock %}
 {% block scripts %}
-<script>window.SKVM_JOBS = [{% for j in jobs if j.status in ['queued','running'] %}{{ j.id }},{% endfor %}];</script>
+<script>
+window.SKVM_JOBS = [{% for j in jobs if j.status in ['queued','running'] %}{{ j.id }},{% endfor %}];
+window.SKVM_RUNNING = [{% for v in running %}{{ v.id }},{% endfor %}];
+</script>
 {% endblock %}

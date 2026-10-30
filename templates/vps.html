@@ -3,76 +3,83 @@
 {% block eyebrow %}VIRTUAL SERVER{% endblock %}
 {% block content %}
 <section class="grid grid-4">
-  <div class="metric glass"><small>Status</small><b><span class="state state-{{ vps.state }}"></span> {{ vps.state }}</b><span>desired: {{ vps.desired_state }}</span></div>
-  <div class="metric glass"><small>Operating system</small><b>{{ vps.os_slug }}</b><span>{{ vps.backend }}{% if vps.engine=='vm' %} · VM{% else %} · container{% endif %}</span></div>
-  <div class="metric glass"><small>Resources</small><b>{{ vps.vcpus }} vCPU · {{ vps.memory_mb }} MiB</b><span>{{ vps.disk_gb }} GiB disk</span></div>
-  <div class="metric glass"><small>Network</small><b>{{ vps.ip_address or 'Pending' }}</b><span>hostname: {{ vps.hostname }}</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="power"></i></span><small>Status</small><b style="font-size:23px;padding-top:8px"><span class="state state-{{ vps.state }}"></span> {{ vps.state }}</b><span>desired: {{ vps.desired_state }}</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="disc-album"></i></span><small>Operating system</small><b style="font-size:23px;padding-top:8px">{{ vps.os_slug }}</b><span>{{ vps.backend }}{% if vps.engine=='vm' %} · VM{% else %} · container{% endif %}</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="cpu"></i></span><small>Resources</small><b style="font-size:23px;padding-top:8px">{{ vps.vcpus }} vCPU · {{ vps.memory_mb }} MiB</b><span>{{ vps.disk_gb }} GiB disk</span></div>
+  <div class="metric"><span class="ic-badge"><i data-lucide="network"></i></span><small>Network</small><b style="font-size:23px;padding-top:8px">{{ vps.ip_address or 'Pending' }}</b><span>hostname: {{ vps.hostname }}</span></div>
 </section>
-<section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="sparkles"></i> Allocation profile</h2><p>These are the resources assigned to this VPS in SKVM and enforced by the runtime. In the web console or SSH, the real <b>neofetch</b>/<b>fastfetch</b> read the guest’s LXCFS-virtualized /proc, so CPU/RAM reflect this allocation — not the node’s totals (disk comes from the guest filesystem/quota).</p></div><a class="btn btn-small btn-primary" href="{{ url_for('vps_console', vps_id=vps.id) }}"><i data-lucide="terminal"></i> Try it in console</a></div>
-  <div class="allocation-grid">
-    <div class="allocation-tile"><small><i data-lucide="cpu"></i> CPU allocation</small><b>{{ vps.vcpus }} vCPU</b><span>Assigned by SKVM, enforced by {{ vps.backend }}</span></div>
-    <div class="allocation-tile"><small><i data-lucide="memory-stick"></i> RAM allocation</small><b>{{ vps.memory_mb }} MiB</b><span>Visible via LXCFS-virtualized /proc in the guest</span></div>
-    <div class="allocation-tile"><small><i data-lucide="hard-drive"></i> Storage allocation</small><b>{{ vps.disk_gb }} GiB</b><span>Allocation target saved for this server</span></div>
-  </div>
-  <div class="command-chips"><code>$ neofetch</code><code>$ fastfetch</code><code>$ free -h</code><code>$ nproc</code></div>
-</section>
-{% if vps.last_error %}<div class="flash flash-danger"><b>Last error:</b> {{ vps.last_error }}</div>{% endif %}
+
+{% if vps.last_error %}<div class="flash flash-danger" style="position:static;margin-bottom:18px"><b>Last error:</b> {{ vps.last_error }}</div>{% endif %}
 
 <div class="grid grid-2">
-<section class="card glass">
+<section class="card" style="margin-bottom:0">
   <div class="card-head"><div><h2><i data-lucide="power"></i> Controls</h2><p>Actions execute on the backend immediately and report the real result.</p></div></div>
   <div class="flex gap-2 flex-wrap">
     <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='start') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit"><i data-lucide="play"></i> Start</button></form>
-    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='restart') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit"><i data-lucide="rotate-cw"></i> Restart</button></form>
-    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='stop') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit"><i data-lucide="square"></i> Stop</button></form>
+    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='restart') }}" data-confirm="Restart {{ vps.name }}? Running processes will be interrupted."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit"><i data-lucide="rotate-cw"></i> Restart</button></form>
+    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='stop') }}" data-confirm="Stop {{ vps.name }}? It will go offline until started again."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn" type="submit"><i data-lucide="square"></i> Stop</button></form>
     <a class="btn btn-primary" href="{{ url_for('vps_console', vps_id=vps.id) }}"><i data-lucide="terminal"></i> Open console</a>
   </div>
-  <form method="post" action="{{ url_for('vps_detail', vps_id=vps.id) }}" class="hidden"></form>
   <form method="post" action="{{ url_for('vps_run', vps_id=vps.id) }}" class="form-stack mt-4">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>Run a command in this VPS<input name="command" maxlength="500" placeholder="e.g. uptime" autocomplete="off"></label>
     <button class="btn" type="submit"><i data-lucide="terminal"></i> Execute</button>
-    <small class="muted">Runs inside your VPS only (as root). Output appears above after execution. For interactive work, use the console.</small>
+    <small class="muted">Runs inside your VPS only (as root). Output appears as a notification. For interactive work, use the console.</small>
   </form>
   <hr class="sep">
-  <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='delete') }}" onsubmit="return confirm('Delete {{ vps.name }} permanently? The server and its data will be removed.')">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-danger w-full" type="submit"><i data-lucide="trash-2"></i> Delete VPS</button>
-  </form>
+  <div class="flex gap-2 flex-wrap">
+    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='reinstall') }}" data-confirm="Reinstall {{ vps.name }}? The instance will be destroyed and rebuilt from its OS image. ALL guest data will be lost and a new root password generated.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn" type="submit"><i data-lucide="refresh-ccw"></i> Reinstall OS</button></form>
+    <form method="post" action="{{ url_for('vps_action', vps_id=vps.id, op='delete') }}" data-confirm="Delete {{ vps.name }} permanently? The server and all its data will be removed. This cannot be undone.">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-danger" type="submit"><i data-lucide="trash-2"></i> Delete VPS</button></form>
+  </div>
 </section>
 
-<section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="activity"></i> Live usage (from this VPS)</h2><p>Read from the guest/container itself — updated on refresh, never copied from the host.</p></div>
+<section class="card" style="margin-bottom:0">
+  <div class="card-head"><div><h2><i data-lucide="activity"></i> Live usage</h2><p>Read from the guest/container itself, refreshed automatically — never copied from the host.</p></div>
   <button class="btn btn-small" id="refreshStats" type="button"><i data-lucide="refresh-cw"></i> Refresh</button></div>
+  <div class="sc-stats" style="margin:0 0 12px">
+    <div class="sc-stat"><span>CPU</span><div class="usage-bar" style="margin:0"><i id="cpuBar" style="width:0%"></i></div><b id="cpuVal">—</b></div>
+    <div class="sc-stat"><span>RAM</span><div class="usage-bar" style="margin:0"><i id="memBar" style="width:0%"></i></div><b id="memVal">—</b></div>
+  </div>
+  <canvas class="spark" id="vpsChart" height="80" style="margin-bottom:12px"></canvas>
   <pre class="console-box" id="statsBox">Loading…</pre>
 </section>
 </div>
 
-<section class="card glass">
-  <div class="card-head"><div><h2><i data-lucide="key-round"></i> Access</h2><p>Root credentials for this VPS and tmate SSH sharing. Keep them private.</p></div></div>
-  <div class="grid grid-2">
+<section class="card">
+  <div class="card-head"><div><h2><i data-lucide="key-round"></i> Access &amp; SSH</h2><p>Root credentials for this VPS and tmate SSH sharing. Keep them private.</p></div></div>
+  <div class="grid grid-2" style="margin-bottom:0">
     <div>
       <h3 class="sub">Root password</h3>
       {% if root_password %}
       <details class="secret-box"><summary>Reveal root password</summary><code>{{ root_password }}</code></details>
-      {% else %}<p class="muted">No password stored (provisioned before password capture, or reset pending).</p>{% endif %}
-      <form method="post" action="{{ url_for('vps_reset_password', vps_id=vps.id) }}" class="mt-3">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn" type="submit"><i data-lucide="key-round"></i> Reset root password</button></form>
-      <p class="muted text-sm mt-2">Use it with the tmate SSH string or the web console (console needs no password).</p>
+      <div class="flex gap-2 mt-3">
+        <button class="btn btn-small" type="button" data-copy="{{ root_password }}"><i data-lucide="copy"></i> Copy password</button>
+      {% else %}<p class="muted">No password stored (provisioned before password capture, or reset pending).</p><div class="flex gap-2 mt-3">{% endif %}
+        <form method="post" action="{{ url_for('vps_reset_password', vps_id=vps.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-small" type="submit"><i data-lucide="key-round"></i> Reset root password</button></form>
+      </div>
+      <p class="muted text-sm mt-3">Use it with the tmate SSH string or a standard SSH client. The web console needs no password.</p>
+      {% if vps.ip_address %}<p class="mt-2"><code class="code-block">ssh root@{{ vps.ip_address }}</code></p>{% endif %}
     </div>
     <div>
       <h3 class="sub">SSH via tmate</h3>
       {% if vps.tmate_ssh %}
         <p class="muted text-sm">Active session — anyone with this string can connect while it runs:</p>
         <code class="code-block">{{ vps.tmate_ssh }}</code>
-        {% if vps.tmate_web %}<p class="mt-2"><a href="{{ vps.tmate_web }}" target="_blank" rel="noopener">Open tmate web view</a></p>{% endif %}
-        <form method="post" action="{{ url_for('vps_tmate', vps_id=vps.id, op='stop') }}" class="mt-3">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-danger" type="submit"><i data-lucide="unplug"></i> Stop SSH session</button></form>
+        <div class="flex gap-2 mt-3 flex-wrap">
+          <button class="btn btn-small" type="button" data-copy="{{ vps.tmate_ssh }}"><i data-lucide="copy"></i> Copy SSH string</button>
+          {% if vps.tmate_web %}<a class="btn btn-small" href="{{ vps.tmate_web }}" target="_blank" rel="noopener"><i data-lucide="external-link"></i> Web view</a>{% endif %}
+          <form method="post" action="{{ url_for('vps_tmate', vps_id=vps.id, op='stop') }}" data-confirm="Stop the tmate SSH session for {{ vps.name }}? The connection string will stop working.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-small btn-danger" type="submit"><i data-lucide="unplug"></i> Stop SSH session</button></form>
+        </div>
       {% else %}
-        <p class="muted text-sm">tmate + SSH keys (host keys and a root identity) are created during provisioning, so starting a session gives you a real SSH connection string for this VPS. Older guests are repaired automatically on start.</p>
+        <p class="muted text-sm">SSH host keys and a root identity are created during provisioning (older guests are repaired automatically on start), so starting a session gives you a real SSH connection string for this VPS.</p>
         <form method="post" action="{{ url_for('vps_tmate', vps_id=vps.id, op='start') }}" class="mt-3">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn btn-primary" type="submit"><i data-lucide="plug"></i> Start SSH (tmate) session</button></form>
@@ -81,25 +88,57 @@
   </div>
 </section>
 
-<section class="card glass">
+<section class="card">
+  <div class="card-head"><div><h2><i data-lucide="sparkles"></i> Allocation profile</h2><p>Resources assigned by SKVM and enforced by the runtime. In the console or SSH, real <b>neofetch</b>/<b>fastfetch</b> read the guest’s LXCFS-virtualized /proc (disk comes from the guest filesystem/quota).</p></div><a class="btn btn-small btn-primary" href="{{ url_for('vps_console', vps_id=vps.id) }}"><i data-lucide="terminal"></i> Try it in console</a></div>
+  <div class="allocation-grid">
+    <div class="allocation-tile"><small><i data-lucide="cpu"></i> CPU allocation</small><b>{{ vps.vcpus }} vCPU</b><span>Assigned by SKVM, enforced by {{ vps.backend }}</span></div>
+    <div class="allocation-tile"><small><i data-lucide="memory-stick"></i> RAM allocation</small><b>{{ vps.memory_mb }} MiB</b><span>Visible via LXCFS-virtualized /proc in the guest</span></div>
+    <div class="allocation-tile"><small><i data-lucide="hard-drive"></i> Storage allocation</small><b>{{ vps.disk_gb }} GiB</b><span>Allocation target saved for this server</span></div>
+  </div>
+  <div class="command-chips"><code>$ neofetch</code><code>$ fastfetch</code><code>$ free -h</code><code>$ nproc</code></div>
+</section>
+
+<section class="card">
   <div class="card-head"><div><h2><i data-lucide="scroll-text"></i> Provisioning &amp; activity</h2><p>Job history for this VPS.</p></div></div>
   {% if jobs %}<div class="table-wrap"><table class="table"><thead><tr><th>Job</th><th>Status</th><th>Progress</th><th>Message</th><th>Updated</th></tr></thead>
   <tbody>{% for j in jobs %}<tr><td>#{{ j.id }} {{ j.kind }}</td><td><span class="badge badge-{{ j.status }}">{{ j.status }}</span></td><td>{{ j.progress }}%</td><td>{{ j.message }}</td><td>{{ j.updated_at }}</td></tr>{% endfor %}</tbody></table></div>
-  {% else %}<div class="empty">No jobs recorded.</div>{% endif %}
+  {% else %}<div class="empty"><i data-lucide="scroll-text"></i><p>No jobs recorded.</p></div>{% endif %}
 </section>
 {% endblock %}
 {% block scripts %}
 <script>
 (function(){
   var box = document.getElementById('statsBox');
+  var cpuHist = [], memHist = [];
+  function fmt(d){
+    var lines = [];
+    lines.push('state: ' + (d.state || 'unknown') + ' · backend: ' + (d.backend || ''));
+    if (d.cpu_percent !== undefined && d.cpu_percent !== null) lines.push('cpu: ' + d.cpu_percent + '%');
+    if (d.memory_used_mb !== undefined) lines.push('memory: ' + d.memory_used_mb + ' / ' + d.memory_limit_mb + ' MiB (' + (d.memory_percent ?? '—') + '%)');
+    if (d.error) lines.push('note: ' + d.error);
+    if (d.guest) lines.push('', d.guest);
+    return lines.join('\n');
+  }
   function load(){
     fetch('{{ url_for("api_vps_stats", vps_id=vps.id) }}', {headers:{'Accept':'application/json'}})
       .then(function(r){ return r.json(); })
-      .then(function(d){ box.textContent = JSON.stringify(d, null, 2); })
+      .then(function(d){
+        box.textContent = fmt(d);
+        var cpu = (typeof d.cpu_percent === 'number') ? d.cpu_percent : null;
+        var mem = (typeof d.memory_percent === 'number') ? d.memory_percent : null;
+        document.getElementById('cpuBar').style.width = (cpu || 0) + '%';
+        document.getElementById('memBar').style.width = (mem || 0) + '%';
+        document.getElementById('cpuVal').textContent = cpu === null ? 'n/a' : cpu + '%';
+        document.getElementById('memVal').textContent = mem === null ? 'n/a' : mem + '%' + (d.memory_used_mb !== undefined ? ' · ' + d.memory_used_mb + ' MiB' : '');
+        if (cpu !== null) cpuHist.push(cpu); if (mem !== null) memHist.push(mem);
+        if (cpuHist.length > 40) cpuHist.shift(); if (memHist.length > 40) memHist.shift();
+        if (window.SKVM) SKVM.drawSpark(document.getElementById('vpsChart'), [cpuHist, memHist]);
+      })
       .catch(function(e){ box.textContent = 'Could not load stats: ' + e; });
   }
   document.getElementById('refreshStats').addEventListener('click', load);
   load();
+  setInterval(function(){ if (!document.hidden) load(); }, 5000);
 })();
 </script>
 {% endblock %}
